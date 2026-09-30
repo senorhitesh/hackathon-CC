@@ -1,0 +1,128 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── AdProof Design System Base ──────────────────────────────────────────────── */
+
+:root {
+  --ap-bg: #09090b;
+  --ap-surface: #18181b;
+  --ap-border: #27272a;
+  --ap-hover: #3f3f46;
+  --ap-muted: #71717a;
+  --ap-fg: #fafafa;
+  --ap-accent: #6366f1;
+  --ap-accent-hover: #818cf8;
+  --pin-open: #6366f1;
+  --pin-resolved: #22c55e;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--ap-bg);
+  color: var(--ap-fg);
+  font-family: 'GeistVF', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+  height: 100dvh;
+  max-height: 100dvh;
+}
+
+/* ─── Scrollbars ────────────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #52525b;
+}
+
+/* ─── Selection ─────────────────────────────────────────────────────────────── */
+
+::selection {
+  background: #6366f130;
+  color: #fafafa;
+}
+
+/* ─── Pin Cursor ────────────────────────────────────────────────────────────── */
+
+.cursor-pin {
+  cursor: crosshair;
+}
+
+/* ─── Canvas Artboard ───────────────────────────────────────────────────────── */
+
+.artboard-shadow {
+  box-shadow:
+    0 0 0 1px #27272a,
+    0 20px 60px rgba(0, 0, 0, 0.6),
+    0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* ─── Pin Marker ────────────────────────────────────────────────────────────── */
+
+.pin-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  z-index: 50;
+  transition: transform 0.15s ease;
+}
+
+.pin-marker:hover {
+  transform: translate(-50%, -50%) scale(1.15);
+  z-index: 60;
+}
+
+.pin-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  animation: pin-ring-pulse 2s ease-out infinite;
+}
+
+@keyframes pin-ring-pulse {
+  0% { transform: scale(1); opacity: 0.5; }
+  70% { transform: scale(1.8); opacity: 0; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+/* ─── Transitions ───────────────────────────────────────────────────────────── */
+
+.transition-base {
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ─── Drag-select styles ────────────────────────────────────────────────────── */
+
+.canvas-element-selected {
+  outline: 2px solid #6366f1;
+  outline-offset: 1px;
+}
+
+/* ─── No select on canvas drag ──────────────────────────────────────────────── */
+
+.no-select {
+  user-select: none;
+  -webkit-user-select: none;
+}

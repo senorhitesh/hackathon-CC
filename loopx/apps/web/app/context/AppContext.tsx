@@ -20,58 +20,12 @@ import type {
   BrandAsset,
   UserRole,
 } from '@repo/types';
+import { supabase } from '../lib/supabaseClient';
 
-// ─── Initial Demo Assets & Data ────────────────────────────────────────────────
+// ─── Initial Data (Empty by Default — Real DB Driven) ─────────────────────────
 
-const DEFAULT_BRAND_ASSETS: BrandAsset[] = [
-  {
-    id: 'asset_logo_1',
-    name: 'loopx Minimal Logo',
-    category: 'brand',
-    src: '/loogx-logo&favicon.png',
-  },
-  {
-    id: 'asset_prod_1',
-    name: 'Summer Promo Hero',
-    category: 'product',
-    src: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80',
-  },
-  {
-    id: 'asset_badge_1',
-    name: 'Verified Quality Badge',
-    category: 'badge',
-    src: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=800&q=80',
-  },
-];
-
-const DEFAULT_POSTS: BoardPost[] = [
-  {
-    id: 'post_1',
-    roomId: 'loopx-demo-room',
-    title: 'Summer Launch Campaign — IG 1:1',
-    description: 'Hero promotional ad variation featuring the primary product showcase.',
-    mediaUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1080&q=80',
-    mediaType: 'image',
-    preset: 'IG_SQUARE',
-    status: 'IN_REVIEW',
-    createdBy: 'owner_lead',
-    createdByName: 'Kargul Studio (Owner)',
-    createdAt: Date.now() - 3600000,
-  },
-  {
-    id: 'post_2',
-    roomId: 'loopx-demo-room',
-    title: 'Story / Reel Teaser 9:16',
-    description: 'Vertical video teaser format designed for Instagram Stories and TikTok.',
-    mediaUrl: 'https://images.unsplash.com/photo-1519046904884-53103b34b206?auto=format&fit=crop&w=1080&q=80',
-    mediaType: 'image',
-    preset: 'REELS_STORY',
-    status: 'DRAFT',
-    createdBy: 'owner_lead',
-    createdByName: 'Kargul Studio (Owner)',
-    createdAt: Date.now() - 7200000,
-  },
-];
+const DEFAULT_BRAND_ASSETS: BrandAsset[] = [];
+const DEFAULT_POSTS: BoardPost[] = [];
 
 // ─── Actions & Reducer State ───────────────────────────────────────────────────
 
@@ -94,6 +48,7 @@ export interface AppState extends AdProofSession {
 type Action =
   | { type: 'SET_USER'; user: ActiveUser & { role: UserRole } }
   | { type: 'SET_ROOM_ID'; roomId: string; sessionName?: string }
+  | { type: 'SET_ROOMS'; rooms: BoardRoom[] }
   | { type: 'ADD_ROOM'; room: BoardRoom }
   | { type: 'SET_POSTS'; posts: BoardPost[] }
   | { type: 'ADD_POST'; post: BoardPost }
@@ -107,6 +62,7 @@ type Action =
   | { type: 'UPDATE_ELEMENT'; id: string; changes: Partial<CanvasElement> }
   | { type: 'REMOVE_ELEMENT'; id: string }
   | { type: 'SELECT_ELEMENT'; id: string | null }
+  | { type: 'SET_ANNOTATIONS'; annotations: PinAnnotation[] }
   | { type: 'ADD_ANNOTATION'; annotation: PinAnnotation }
   | { type: 'RESOLVE_ANNOTATION'; id: string; resolvedBy: string; resolvedAt: number }
   | { type: 'REOPEN_ANNOTATION'; id: string }
@@ -120,14 +76,14 @@ type Action =
   | { type: 'SET_SELECTED_PIN'; id: string | null }
   | { type: 'TOGGLE_MODAL'; modal: 'isLoginOpen' | 'isCreateRoomOpen' | 'isCreatePostOpen' | 'isShareOpen'; value?: boolean };
 
-const DEFAULT_ROOM_ID = 'loopx-demo-room';
+const DEFAULT_ROOM_ID = 'loopx-main-room';
 
 const initialState: AppState = {
   roomId: DEFAULT_ROOM_ID,
-  sessionName: 'My Project / Board 1',
+  sessionName: 'Main Studio Board',
   currentUser: {
     uid: 'owner_lead',
-    name: 'Kargul Lead',
+    name: 'Kargul Studio Lead',
     status: 'ONLINE',
     role: 'owner',
   },
@@ -140,14 +96,14 @@ const initialState: AppState = {
   rooms: [
     {
       id: DEFAULT_ROOM_ID,
-      name: 'My Project / Board 1',
+      name: 'Main Studio Board',
       shareUrl: typeof window !== 'undefined' ? `${window.location.origin}?room=${DEFAULT_ROOM_ID}&role=client` : `?room=${DEFAULT_ROOM_ID}&role=client`,
       ownerName: 'Kargul Studio',
       createdAt: Date.now(),
     },
   ],
   posts: DEFAULT_POSTS,
-  activePostId: 'post_1',
+  activePostId: null,
   brandAssets: DEFAULT_BRAND_ASSETS,
   selectedElementId: null,
   pinModeActive: false,
@@ -172,16 +128,19 @@ function reducer(state: AppState, action: Action): AppState {
       };
     }
 
+    case 'SET_ROOMS':
+      return { ...state, rooms: action.rooms };
+
     case 'ADD_ROOM':
       return {
         ...state,
-        rooms: [action.room, ...state.rooms],
+        rooms: [action.room, ...state.rooms.filter((r) => r.id !== action.room.id)],
         roomId: action.room.id,
         sessionName: action.room.name,
       };
 
     case 'SET_POSTS':
-      return { ...state, posts: action.posts };
+      return { ...state, posts: action.posts, activePostId: action.posts[0]?.id ?? null };
 
     case 'ADD_POST': {
       const posts = [action.post, ...state.posts];
@@ -241,6 +200,9 @@ function reducer(state: AppState, action: Action): AppState {
 
     case 'SELECT_ELEMENT':
       return { ...state, selectedElementId: action.id };
+
+    case 'SET_ANNOTATIONS':
+      return { ...state, annotations: action.annotations };
 
     case 'ADD_ANNOTATION': {
       const annotation = {
@@ -354,11 +316,10 @@ const AppContext = createContext<AppContextValue | null>(null);
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
 
-  // Synchronize LocalStorage on mount
+  // Synchronize Supabase Auth & DB Data on mount
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // Load URL params if any
     const params = new URLSearchParams(window.location.search);
     const urlRoom = params.get('room');
     const urlRole = params.get('role') as UserRole | null;
@@ -382,59 +343,94 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Check Supabase Auth session for Admin
-    import('../lib/supabaseClient').then(({ supabase }) => {
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session?.user) {
-          const adminUser: ActiveUser & { role: UserRole } = {
-            uid: session.user.id,
-            name: session.user.user_metadata?.full_name || session.user.email || 'Studio Admin',
-            status: 'ONLINE',
-            role: 'owner',
-          };
-          dispatch({ type: 'SET_USER', user: adminUser });
-        }
-      });
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        const adminUser: ActiveUser & { role: UserRole } = {
+          uid: session.user.id,
+          name: session.user.user_metadata?.full_name || session.user.email || 'Studio Admin',
+          status: 'ONLINE',
+          role: 'owner',
+        };
+        dispatch({ type: 'SET_USER', user: adminUser });
+      }
     });
-
-    // LocalStorage rooms
-    const savedRooms = localStorage.getItem('loopx_rooms');
-    if (savedRooms) {
-      try {
-        const parsed = JSON.parse(savedRooms);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          parsed.forEach((r) => dispatch({ type: 'ADD_ROOM', room: r }));
-        }
-      } catch (_) {}
-    }
 
     if (urlRoom) {
       dispatch({ type: 'SET_ROOM_ID', roomId: urlRoom });
     }
 
-    // LocalStorage posts
-    const savedPosts = localStorage.getItem('loopx_posts');
-    if (savedPosts) {
+    // Fetch Database Tables from Supabase with local fallback
+    async function loadSupabaseData() {
+      // 1. Fetch Rooms from Supabase
       try {
-        const parsed = JSON.parse(savedPosts);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          dispatch({ type: 'SET_POSTS', posts: parsed });
+        const { data: dbRooms } = await supabase.from('rooms').select('*');
+        if (dbRooms && dbRooms.length > 0) {
+          const formattedRooms: BoardRoom[] = dbRooms.map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            shareUrl: r.share_url || `${window.location.origin}?room=${r.id}&role=client`,
+            ownerName: r.owner_name || 'Kargul Studio',
+            createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+          }));
+          dispatch({ type: 'SET_ROOMS', rooms: formattedRooms });
+        }
+      } catch (_) {}
+
+      // 2. Fetch Posts from Supabase DB
+      try {
+        const targetRoom = urlRoom || state.roomId;
+        const { data: dbPosts } = await supabase.from('posts').select('*').eq('room_id', targetRoom);
+        if (dbPosts && dbPosts.length > 0) {
+          const formattedPosts: BoardPost[] = dbPosts.map((p: any) => ({
+            id: p.id,
+            roomId: p.room_id,
+            title: p.title,
+            description: p.description,
+            mediaUrl: p.media_url,
+            mediaType: p.media_type || 'image',
+            preset: p.preset || 'IG_SQUARE',
+            status: p.status || 'DRAFT',
+            createdBy: p.created_by,
+            createdByName: p.created_by_name || 'Studio Owner',
+            createdAt: p.created_at ? new Date(p.created_at).getTime() : Date.now(),
+            x: p.x,
+            y: p.y,
+          }));
+          dispatch({ type: 'SET_POSTS', posts: formattedPosts });
+        } else {
+          const savedPosts = localStorage.getItem('loopx_posts');
+          if (savedPosts) {
+            const parsed = JSON.parse(savedPosts);
+            if (Array.isArray(parsed)) dispatch({ type: 'SET_POSTS', posts: parsed });
+          }
+        }
+      } catch (_) {}
+
+      // 3. Fetch Brand Assets from Supabase DB
+      try {
+        const { data: dbAssets } = await supabase.from('brand_assets').select('*');
+        if (dbAssets && dbAssets.length > 0) {
+          const formattedAssets: BrandAsset[] = dbAssets.map((a: any) => ({
+            id: a.id,
+            name: a.name,
+            category: a.category || 'brand',
+            src: a.src,
+          }));
+          dispatch({ type: 'SET_BRAND_ASSETS', assets: formattedAssets });
+        } else {
+          const savedAssets = localStorage.getItem('loopx_brand_assets');
+          if (savedAssets) {
+            const parsed = JSON.parse(savedAssets);
+            if (Array.isArray(parsed)) dispatch({ type: 'SET_BRAND_ASSETS', assets: parsed });
+          }
         }
       } catch (_) {}
     }
 
-    // LocalStorage brand assets
-    const savedAssets = localStorage.getItem('loopx_brand_assets');
-    if (savedAssets) {
-      try {
-        const parsed = JSON.parse(savedAssets);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          dispatch({ type: 'SET_BRAND_ASSETS', assets: parsed });
-        }
-      } catch (_) {}
-    }
+    loadSupabaseData();
   }, []);
 
-  // Save changes to LocalStorage
+  // Save changes to LocalStorage as secondary cache
   useEffect(() => {
     if (typeof window === 'undefined') return;
     localStorage.setItem('loopx_posts', JSON.stringify(state.posts));
@@ -474,7 +470,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ownerName: state.currentUser.name,
         createdAt: Date.now(),
       };
+
       dispatch({ type: 'ADD_ROOM', room });
+
+      // Save to Supabase Database
+      (async () => {
+        try {
+          await supabase.from('rooms').insert({
+            id: room.id,
+            name: room.name,
+            share_url: room.shareUrl,
+            owner_name: room.ownerName,
+          });
+        } catch (_) {}
+      })();
+
       return room;
     },
     [state.currentUser.name],
@@ -490,7 +500,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         createdByName: state.currentUser.name,
         createdAt: Date.now(),
       };
+
       dispatch({ type: 'ADD_POST', post });
+
+      // Save Post directly to Supabase DB
+      (async () => {
+        try {
+          await supabase.from('posts').insert({
+            id: post.id,
+            room_id: post.roomId,
+            title: post.title,
+            description: post.description,
+            media_url: post.mediaUrl,
+            media_type: post.mediaType,
+            preset: post.preset,
+            status: post.status,
+            created_by: post.createdBy,
+            created_by_name: post.createdByName,
+            x: post.x,
+            y: post.y,
+          });
+        } catch (_) {}
+      })();
+
       return post;
     },
     [state.roomId, state.currentUser.uid, state.currentUser.name],
@@ -504,7 +536,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         category,
         src,
       };
+
       dispatch({ type: 'ADD_BRAND_ASSET', asset });
+
+      // Save Brand Asset to Supabase DB
+      (async () => {
+        try {
+          await supabase.from('brand_assets').insert({
+            id: asset.id,
+            name: asset.name,
+            category: asset.category,
+            src: asset.src,
+          });
+        } catch (_) {}
+      })();
     },
     [],
   );
@@ -517,7 +562,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         createdAt: Date.now(),
         status: 'OPEN',
       };
+
       dispatch({ type: 'ADD_ANNOTATION', annotation: full });
+
+      // Save Annotation to Supabase DB
+      (async () => {
+        try {
+          await supabase.from('annotations').insert({
+            id: full.id,
+            preset: full.preset,
+            normalized_x: full.normalizedX,
+            normalized_y: full.normalizedY,
+            author_id: full.authorId,
+            author_name: full.authorName,
+            comment: full.comment,
+            status: full.status,
+          });
+        } catch (_) {}
+      })();
+
       return full;
     },
     [],
@@ -531,6 +594,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         resolvedBy: state.currentUser.name,
         resolvedAt: Date.now(),
       });
+
+      // Update Supabase DB
+      (async () => {
+        try {
+          await supabase.from('annotations').update({ status: 'RESOLVED', resolved_by: state.currentUser.name }).eq('id', id);
+        } catch (_) {}
+      })();
     },
     [state.currentUser.name],
   );

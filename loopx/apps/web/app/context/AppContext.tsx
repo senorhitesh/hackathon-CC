@@ -98,6 +98,7 @@ type Action =
   | { type: 'SET_POSTS'; posts: BoardPost[] }
   | { type: 'ADD_POST'; post: BoardPost }
   | { type: 'UPDATE_POST_STATUS'; postId: string; status: BoardPost['status'] }
+  | { type: 'UPDATE_POST_POSITION'; postId: string; x: number; y: number }
   | { type: 'SELECT_POST'; postId: string | null }
   | { type: 'SET_BRAND_ASSETS'; assets: BrandAsset[] }
   | { type: 'ADD_BRAND_ASSET'; asset: BrandAsset }
@@ -192,6 +193,14 @@ function reducer(state: AppState, action: Action): AppState {
         ...state,
         posts: state.posts.map((p) =>
           p.id === action.postId ? { ...p, status: action.status } : p,
+        ),
+      };
+
+    case 'UPDATE_POST_POSITION':
+      return {
+        ...state,
+        posts: state.posts.map((p) =>
+          p.id === action.postId ? { ...p, x: action.x, y: action.y } : p,
         ),
       };
 

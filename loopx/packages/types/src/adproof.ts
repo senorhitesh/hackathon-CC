@@ -175,6 +175,8 @@ export interface BoardPost {
   createdBy: string;
   createdByName: string;
   createdAt: number;
+  x?: number;
+  y?: number;
 }
 
 export interface BoardRoom {

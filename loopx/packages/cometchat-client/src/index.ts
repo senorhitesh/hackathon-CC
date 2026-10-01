@@ -12,9 +12,12 @@ export {
   sendAnnotation,
   resolveAnnotation,
   reopenAnnotation,
-  // Real-time listeners
+  // Real-time listeners & Messaging
   addAnnotationListener,
   addPresenceListener,
+  sendCometChatMessage,
+  fetchCometChatMessageHistory,
+  addCometChatMessageListener,
 } from './chat';
 
 export type { AnnotationListenerCallbacks, PresenceCallbacks } from './chat';

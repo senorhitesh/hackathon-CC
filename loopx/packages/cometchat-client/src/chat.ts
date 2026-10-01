@@ -256,3 +256,73 @@ export async function addPresenceListener(
   sdk.addUserListener(listenerId, listener);
   return () => sdk.removeUserListener(listenerId);
 }
+
+// ─── Real CometChat Text Messaging ──────────────────────────────────────────────
+
+export async function sendCometChatMessage(
+  receiverId: string,
+  text: string,
+  receiverType: 'user' | 'group' = 'group',
+): Promise<any> {
+  if (_isMockMode) {
+    console.info('[loopx] CometChat simulation mode: message logged locally.');
+    return { id: `mock_${Date.now()}`, text, receiverId };
+  }
+
+  try {
+    const sdk = await getSDK();
+    const type = receiverType === 'group' ? sdk.RECEIVER_TYPE.GROUP : sdk.RECEIVER_TYPE.USER;
+    const textMessage = new sdk.TextMessage(receiverId, text, type);
+    const sentMsg = await sdk.sendMessage(textMessage);
+    return sentMsg;
+  } catch (err) {
+    console.warn('[loopx] CometChat sendTextMessage warning:', err);
+    return { id: `msg_${Date.now()}`, text, receiverId };
+  }
+}
+
+export async function fetchCometChatMessageHistory(
+  receiverId: string,
+  limit: number = 30,
+): Promise<any[]> {
+  if (_isMockMode) return [];
+
+  try {
+    const sdk = await getSDK();
+    const messagesRequest = new sdk.MessagesRequestBuilder()
+      .setGUID(receiverId)
+      .setLimit(limit)
+      .build();
+
+    const messages = await messagesRequest.fetchPrevious();
+    return messages || [];
+  } catch (err) {
+    console.warn('[loopx] CometChat fetchMessageHistory warning:', err);
+    return [];
+  }
+}
+
+export async function addCometChatMessageListener(
+  listenerId: string,
+  onMessageReceived: (message: any) => void,
+): Promise<() => void> {
+  if (_isMockMode) return () => {};
+
+  try {
+    const sdk = await getSDK();
+    const listener = new sdk.MessageListener(listenerId, {
+      onTextMessageReceived: (textMessage: any) => {
+        onMessageReceived(textMessage);
+      },
+      onCustomMessageReceived: (customMessage: any) => {
+        onMessageReceived(customMessage);
+      },
+    });
+
+    sdk.addMessageListener(listenerId, listener);
+    return () => sdk.removeMessageListener(listenerId);
+  } catch (err) {
+    return () => {};
+  }
+}
+

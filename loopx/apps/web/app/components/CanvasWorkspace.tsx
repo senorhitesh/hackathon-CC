@@ -40,6 +40,12 @@ interface ChatMessage {
 }
 
 import { supabase } from '../lib/supabaseClient';
+import {
+  initCometChat,
+  loginUser as loginCometChatUser,
+  sendCometChatMessage,
+  addCometChatMessageListener,
+} from '@repo/cometchat-client';
 
 export function CanvasWorkspace() {
   const { state, dispatch, addAnnotation, resolveAnnotation } = useAppContext();
@@ -67,7 +73,7 @@ export function CanvasWorkspace() {
   const [inputTexts, setInputTexts] = useState<Record<string, string>>({});
   const [nodeTabs, setNodeTabs] = useState<Record<string, 'chat' | 'ai' | 'pins'>>({});
 
-  // Fetch messages from Supabase DB on mount
+  // Fetch messages from Supabase DB on mount & initialize CometChat SDK
   useEffect(() => {
     async function loadDbMessages() {
       try {
@@ -86,7 +92,42 @@ export function CanvasWorkspace() {
       } catch (_) {}
     }
     loadDbMessages();
-  }, []);
+
+    // Initialize CometChat SDK & Login User
+    async function setupCometChat() {
+      await initCometChat();
+      if (currentUser?.uid) {
+        try {
+          await loginCometChatUser(currentUser.uid);
+        } catch (_) {}
+      }
+    }
+    setupCometChat();
+
+    // Setup real-time listener for incoming CometChat messages
+    let cleanup: (() => void) | undefined;
+    addCometChatMessageListener('canvas_chat_listener', (incomingMsg: any) => {
+      if (!incomingMsg) return;
+      const text = incomingMsg.text || incomingMsg.data?.text || incomingMsg.data?.annotation?.comment;
+      if (!text) return;
+
+      const newMsg: ChatMessage = {
+        id: incomingMsg.id || `cc_${Date.now()}`,
+        postId: incomingMsg.receiverId || activePostId || 'main',
+        senderName: incomingMsg.sender?.name || 'CometChat Collaborator',
+        senderRole: 'client',
+        text: text,
+        timestamp: Date.now(),
+      };
+      setChatMessages((prev) => [...prev, newMsg]);
+    }).then((unsub) => {
+      cleanup = unsub;
+    });
+
+    return () => {
+      if (cleanup) cleanup();
+    };
+  }, [currentUser?.uid, activePostId]);
 
   // Pin annotation state
   const [commentText, setCommentText] = useState('');
@@ -243,6 +284,13 @@ export function CanvasWorkspace() {
           sender_role: newMsg.senderRole,
           text: newMsg.text,
         });
+      } catch (_) {}
+    })();
+
+    // Broadcast via CometChat SDK
+    (async () => {
+      try {
+        await sendCometChatMessage(postId, text);
       } catch (_) {}
     })();
 

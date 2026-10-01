@@ -17,6 +17,14 @@ import {
   Send,
   Bot,
   Zap,
+  Heart,
+  Repeat,
+  Share2,
+  Bookmark,
+  MoreHorizontal,
+  ThumbsUp,
+  Volume2,
+  BarChart2,
   Check,
 } from 'lucide-react';
 import type { BoardPost } from '@repo/types';
@@ -41,7 +49,7 @@ export function CanvasWorkspace() {
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [isSpacePressed, setIsSpacePressed] = useState(false);
 
-  // Dragging Node State (Post Node or Chat Node)
+  // Dragging Node State
   const [draggingTarget, setDraggingTarget] = useState<{ id: string; type: 'post' | 'chat' } | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
@@ -251,6 +259,255 @@ export function CanvasWorkspace() {
     }
   }
 
+  // ── Authentic Social Media UI Card Renderer ──
+  function renderSocialMediaCard(post: BoardPost) {
+    const postAnnotations = annotations;
+
+    switch (post.preset) {
+      /* ── X / TWITTER POST THREAD UI ── */
+      case 'X_BANNER':
+        return (
+          <div className="bg-white text-slate-900 font-sans p-4 space-y-3">
+            {/* X Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-full bg-slate-900 text-white font-bold text-xs flex items-center justify-center">
+                  KS
+                </div>
+                <div>
+                  <div className="flex items-center gap-1">
+                    <span className="font-bold text-xs text-slate-900">Kargul Studio</span>
+                    <span className="w-3.5 h-3.5 rounded-full bg-blue-500 text-white text-[9px] font-bold flex items-center justify-center">✓</span>
+                  </div>
+                  <span className="text-[10px] text-slate-500">@kargul_studio · 1h</span>
+                </div>
+              </div>
+              <MoreHorizontal className="w-4 h-4 text-slate-400" />
+            </div>
+
+            {/* X Post Copy */}
+            <p className="text-xs text-slate-800 leading-relaxed font-normal">
+              {post.description || "Excited to reveal our latest creative campaign iteration! What do you think of this visual layout? 👇 #loopx #creative"}
+            </p>
+
+            {/* 16:9 Image Media Card with Pin Annotations Overlay */}
+            <div
+              onClick={(e) => handlePostImageClick(e, post)}
+              className="relative w-full aspect-video rounded-2xl bg-slate-100 overflow-hidden border border-slate-200 cursor-pointer"
+            >
+              <img src={post.mediaUrl} alt={post.title} className="w-full h-full object-cover pointer-events-none" />
+
+              {/* Pin Overlay */}
+              {postAnnotations.map((pin, pIdx) => (
+                <div
+                  key={pin.id}
+                  className="absolute z-30 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center"
+                  style={{
+                    left: `${pin.normalizedX * 100}%`,
+                    top: `${pin.normalizedY * 100}%`,
+                  }}
+                >
+                  <div className="w-6 h-6 rounded-full bg-indigo-600 text-white font-bold text-xs flex items-center justify-center shadow-lg border-2 border-white animate-pulse">
+                    {pIdx + 1}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* X Actions Footer */}
+            <div className="flex items-center justify-between text-slate-500 text-[11px] pt-1 border-t border-slate-100">
+              <span className="flex items-center gap-1 hover:text-blue-500"><MessageSquare className="w-3.5 h-3.5" /> 18</span>
+              <span className="flex items-center gap-1 hover:text-green-500"><Repeat className="w-3.5 h-3.5" /> 42</span>
+              <span className="flex items-center gap-1 hover:text-rose-500"><Heart className="w-3.5 h-3.5" /> 128</span>
+              <span className="flex items-center gap-1 hover:text-blue-500"><BarChart2 className="w-3.5 h-3.5" /> 3.2k</span>
+              <Bookmark className="w-3.5 h-3.5 hover:text-blue-500" />
+            </div>
+          </div>
+        );
+
+      /* ── REELS / INSTAGRAM STORY 9:16 UI ── */
+      case 'REELS_STORY':
+        return (
+          <div className="relative w-full aspect-[9/16] bg-slate-900 text-white rounded-2xl overflow-hidden shadow-inner flex flex-col justify-between p-4">
+            {/* Background Image */}
+            <div
+              onClick={(e) => handlePostImageClick(e, post)}
+              className="absolute inset-0 z-0 cursor-pointer"
+            >
+              <img src={post.mediaUrl} alt={post.title} className="w-full h-full object-cover pointer-events-none" />
+              <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60" />
+
+              {/* Pin Overlay */}
+              {postAnnotations.map((pin, pIdx) => (
+                <div
+                  key={pin.id}
+                  className="absolute z-30 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center"
+                  style={{
+                    left: `${pin.normalizedX * 100}%`,
+                    top: `${pin.normalizedY * 100}%`,
+                  }}
+                >
+                  <div className="w-6 h-6 rounded-full bg-indigo-600 text-white font-bold text-xs flex items-center justify-center shadow-lg border-2 border-white animate-pulse">
+                    {pIdx + 1}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Story Top Bar */}
+            <div className="relative z-10 space-y-2">
+              <div className="w-full h-0.5 bg-white/40 rounded-full overflow-hidden">
+                <div className="w-2/3 h-full bg-white rounded-full" />
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full border border-pink-500 p-0.5 bg-slate-900">
+                    <div className="w-full h-full bg-slate-800 rounded-full flex items-center justify-center text-[9px] font-bold">KS</div>
+                  </div>
+                  <span className="text-xs font-bold text-white shadow-xs">kargul_studio</span>
+                  <span className="text-[10px] text-white/70">12h</span>
+                </div>
+                <Volume2 className="w-4 h-4 text-white" />
+              </div>
+            </div>
+
+            {/* Story Right Action Column & Caption */}
+            <div className="relative z-10 flex items-end justify-between">
+              <div className="space-y-1 max-w-[220px]">
+                <p className="text-xs font-medium text-white shadow-xs leading-snug">
+                  {post.description || post.title}
+                </p>
+                <span className="text-[10px] text-white/80 font-mono flex items-center gap-1">
+                  🎵 Original Audio — Kargul Studio
+                </span>
+              </div>
+              <div className="flex flex-col items-center gap-3 text-white">
+                <div className="flex flex-col items-center text-[10px] font-bold"><Heart className="w-5 h-5 fill-white/20" /> 4.2k</div>
+                <div className="flex flex-col items-center text-[10px] font-bold"><MessageSquare className="w-5 h-5" /> 182</div>
+                <Share2 className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
+        );
+
+      /* ── LINKEDIN POST UI ── */
+      case 'LINKEDIN_POST':
+        return (
+          <div className="bg-white text-slate-900 font-sans p-4 space-y-3">
+            {/* LinkedIn Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-full bg-slate-800 text-white font-bold text-xs flex items-center justify-center">
+                  AR
+                </div>
+                <div>
+                  <h4 className="font-bold text-xs text-slate-900">Alex Rivera</h4>
+                  <p className="text-[10px] text-slate-500">Creative Lead at Kargul Studio • 2h • 🌐</p>
+                </div>
+              </div>
+              <MoreHorizontal className="w-4 h-4 text-slate-400" />
+            </div>
+
+            {/* LinkedIn Copy */}
+            <p className="text-xs text-slate-800 leading-relaxed">
+              {post.description || "Proud to present our latest visual campaign iteration for our client partner! Let us know your thoughts in the feedback thread below. 🚀"}
+            </p>
+
+            {/* Media Image Banner */}
+            <div
+              onClick={(e) => handlePostImageClick(e, post)}
+              className="relative w-full aspect-[1200/628] rounded-xl bg-slate-100 overflow-hidden border border-slate-200 cursor-pointer"
+            >
+              <img src={post.mediaUrl} alt={post.title} className="w-full h-full object-cover pointer-events-none" />
+
+              {/* Pin Overlay */}
+              {postAnnotations.map((pin, pIdx) => (
+                <div
+                  key={pin.id}
+                  className="absolute z-30 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center"
+                  style={{
+                    left: `${pin.normalizedX * 100}%`,
+                    top: `${pin.normalizedY * 100}%`,
+                  }}
+                >
+                  <div className="w-6 h-6 rounded-full bg-indigo-600 text-white font-bold text-xs flex items-center justify-center shadow-lg border-2 border-white animate-pulse">
+                    {pIdx + 1}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* LinkedIn Actions Footer */}
+            <div className="flex items-center justify-around text-slate-600 text-[11px] font-semibold pt-2 border-t border-slate-100">
+              <span className="flex items-center gap-1.5 hover:text-blue-600 cursor-pointer"><ThumbsUp className="w-4 h-4" /> Like</span>
+              <span className="flex items-center gap-1.5 hover:text-blue-600 cursor-pointer"><MessageSquare className="w-4 h-4" /> Comment</span>
+              <span className="flex items-center gap-1.5 hover:text-blue-600 cursor-pointer"><Repeat className="w-4 h-4" /> Repost</span>
+              <span className="flex items-center gap-1.5 hover:text-blue-600 cursor-pointer"><Send className="w-4 h-4" /> Send</span>
+            </div>
+          </div>
+        );
+
+      /* ── INSTAGRAM SQUARE 1:1 UI (Default) ── */
+      default:
+        return (
+          <div className="bg-white text-slate-900 font-sans">
+            {/* IG Header */}
+            <div className="p-3 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-amber-500 to-purple-600 p-0.5">
+                  <div className="w-full h-full bg-white rounded-full flex items-center justify-center text-[9px] font-bold text-slate-900">
+                    KS
+                  </div>
+                </div>
+                <span className="text-xs font-bold text-slate-900">kargul_studio</span>
+              </div>
+              <MoreHorizontal className="w-4 h-4 text-slate-400" />
+            </div>
+
+            {/* 1:1 Image */}
+            <div
+              onClick={(e) => handlePostImageClick(e, post)}
+              className="relative w-full aspect-square bg-slate-100 flex items-center justify-center overflow-hidden cursor-pointer"
+            >
+              <img src={post.mediaUrl} alt={post.title} className="w-full h-full object-cover pointer-events-none" />
+
+              {/* Pin Overlay */}
+              {postAnnotations.map((pin, pIdx) => (
+                <div
+                  key={pin.id}
+                  className="absolute z-30 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center"
+                  style={{
+                    left: `${pin.normalizedX * 100}%`,
+                    top: `${pin.normalizedY * 100}%`,
+                  }}
+                >
+                  <div className="w-6 h-6 rounded-full bg-indigo-600 text-white font-bold text-xs flex items-center justify-center shadow-lg border-2 border-white animate-pulse">
+                    {pIdx + 1}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* IG Footer */}
+            <div className="p-3 space-y-2">
+              <div className="flex items-center justify-between text-slate-800">
+                <div className="flex items-center gap-3">
+                  <Heart className="w-4 h-4 hover:text-rose-500 cursor-pointer" />
+                  <MessageSquare className="w-4 h-4 hover:text-blue-500 cursor-pointer" />
+                  <Send className="w-4 h-4 hover:text-blue-500 cursor-pointer" />
+                </div>
+                <Bookmark className="w-4 h-4 hover:text-slate-900 cursor-pointer" />
+              </div>
+              <p className="text-[11px] text-slate-800 leading-snug">
+                <strong className="text-slate-900 font-bold mr-1">kargul_studio</strong>
+                {post.description || post.title}
+              </p>
+            </div>
+          </div>
+        );
+    }
+  }
+
   return (
     <main
       ref={containerRef}
@@ -292,7 +549,7 @@ export function CanvasWorkspace() {
 
         <div className="w-px h-4 bg-slate-200" />
 
-        {/* Zoom & Reset Controls */}
+        {/* Zoom Controls */}
         <div className="flex items-center gap-1 text-slate-500 text-xs font-mono">
           <button
             onClick={() => setZoom((z) => Math.max(50, z - 10))}
@@ -330,20 +587,18 @@ export function CanvasWorkspace() {
           transformOrigin: '50% 50%',
         }}
       >
-        {/* SVG Bezier Wire Connections between Post Nodes & Chat Nodes */}
+        {/* SVG Bezier Wires */}
         <svg className="absolute inset-0 w-[5000px] h-[5000px] pointer-events-none z-0 overflow-visible">
           {posts.map((post, idx) => {
             const postX = post.x ?? (idx % 2 === 0 ? 80 : 540);
             const postY = post.y ?? (Math.floor(idx / 2) * 520 + 80);
 
-            // Chat node position
             const chatPos = chatNodePositions[post.id] ?? {
-              x: postX + 440,
+              x: postX + 460,
               y: postY,
             };
 
-            // Start & End handle coordinates
-            const startX = postX + 380;
+            const startX = postX + 400;
             const startY = postY + 180;
             const endX = chatPos.x;
             const endY = chatPos.y + 180;
@@ -353,7 +608,6 @@ export function CanvasWorkspace() {
 
             return (
               <g key={`wire_${post.id}`}>
-                {/* Connection Line Curve */}
                 <path
                   d={pathData}
                   fill="none"
@@ -362,7 +616,6 @@ export function CanvasWorkspace() {
                   strokeDasharray="6 4"
                   className="animate-pulse opacity-80"
                 />
-                {/* Handle Ports */}
                 <circle cx={startX} cy={startY} r="6" fill="#6366f1" stroke="#ffffff" strokeWidth="2" />
                 <circle cx={endX} cy={endY} r="6" fill="#4f46e5" stroke="#ffffff" strokeWidth="2" />
               </g>
@@ -394,9 +647,8 @@ export function CanvasWorkspace() {
             const postX = post.x ?? (idx % 2 === 0 ? 80 : 540);
             const postY = post.y ?? (Math.floor(idx / 2) * 520 + 80);
 
-            // Connected Chat Node Position
             const chatPos = chatNodePositions[post.id] ?? {
-              x: postX + 440,
+              x: postX + 460,
               y: postY,
             };
 
@@ -405,10 +657,10 @@ export function CanvasWorkspace() {
 
             return (
               <React.Fragment key={post.id}>
-                {/* ── 1. POST NODE (n8n Node Style) ── */}
+                {/* ── 1. AUTHENTIC SOCIAL MEDIA POST NODE ── */}
                 <div
                   onMouseDown={(e) => startDrag(e, post.id, 'post')}
-                  className={`absolute w-[380px] rounded-2xl bg-white border transition-shadow duration-150 shadow-xl overflow-hidden cursor-grab active:cursor-grabbing ${
+                  className={`absolute w-[400px] rounded-2xl bg-white border transition-shadow duration-150 shadow-xl overflow-hidden cursor-grab active:cursor-grabbing ${
                     isSelected
                       ? 'border-indigo-600 ring-4 ring-indigo-500/15 shadow-2xl z-20'
                       : 'border-slate-200 hover:border-slate-300 z-10'
@@ -418,19 +670,19 @@ export function CanvasWorkspace() {
                     top: `${postY}px`,
                   }}
                 >
-                  {/* Handle Output Port Label */}
+                  {/* Handle Output Port */}
                   <div className="absolute right-0 top-[170px] translate-x-1/2 z-30 flex items-center gap-1 bg-indigo-600 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-full shadow-md border border-white">
                     <span>Chat Out</span>
                     <Zap className="w-2.5 h-2.5" />
                   </div>
 
-                  {/* Header Handle */}
+                  {/* Node Header Handle */}
                   <div className="p-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/90 cursor-grab active:cursor-grabbing">
                     <div className="flex items-center gap-2">
                       <Move className="w-3.5 h-3.5 text-slate-400" />
                       <div>
                         <span className="text-[9px] font-extrabold uppercase tracking-widest text-indigo-600 block">
-                          POST NODE #{idx + 1}
+                          {post.preset.replace('_', ' ')} POST
                         </span>
                         <h3 className="text-xs font-bold text-slate-900 truncate max-w-[170px]">
                           {post.title}
@@ -440,85 +692,45 @@ export function CanvasWorkspace() {
                     {getStatusBadge(post.status)}
                   </div>
 
-                  {/* Image Container */}
-                  <div
-                    onClick={(e) => handlePostImageClick(e, post)}
-                    className="relative w-full aspect-square bg-slate-100 flex items-center justify-center overflow-hidden cursor-pointer"
-                  >
-                    <img
-                      src={post.mediaUrl}
-                      alt={post.title}
-                      className="w-full h-full object-cover pointer-events-none"
-                    />
+                  {/* Render Authentic Social Media UI */}
+                  {renderSocialMediaCard(post)}
 
-                    {/* Pin Overlay */}
-                    {annotations.map((pin, pIdx) => (
-                      <div
-                        key={pin.id}
-                        className="absolute z-30 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center"
-                        style={{
-                          left: `${pin.normalizedX * 100}%`,
-                          top: `${pin.normalizedY * 100}%`,
-                        }}
-                      >
-                        <div className="w-6 h-6 rounded-full bg-indigo-600 text-white font-bold text-xs flex items-center justify-center shadow-lg border-2 border-white animate-pulse">
-                          {pIdx + 1}
-                        </div>
+                  {/* Pending Pin Comment Floating Box */}
+                  {pendingPin && pendingPin.postId === post.id && (
+                    <div
+                      className="absolute z-40 p-3 bg-white border border-slate-200 shadow-2xl rounded-2xl w-64 -translate-x-1/2 -translate-y-1/2 top-1/2 left-1/2"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span className="text-[10px] font-bold text-indigo-600 uppercase block mb-1">
+                        Add Pin Comment
+                      </span>
+                      <textarea
+                        value={commentText}
+                        onChange={(e) => setCommentText(e.target.value)}
+                        placeholder="Type feedback..."
+                        autoFocus
+                        rows={2}
+                        className="w-full p-2 text-xs rounded-lg border border-slate-200 bg-slate-50 text-slate-900 focus:outline-none focus:border-slate-900"
+                      />
+                      <div className="flex items-center justify-end gap-1.5 mt-2">
+                        <button
+                          onClick={() => setPendingPin(null)}
+                          className="px-2 py-1 text-[11px] font-semibold text-slate-500 hover:text-slate-900"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={submitPinComment}
+                          className="px-3 py-1 rounded-lg bg-indigo-600 text-white text-[11px] font-semibold hover:bg-indigo-700 shadow-xs"
+                        >
+                          Save
+                        </button>
                       </div>
-                    ))}
-
-                    {/* Pending Pin Placement */}
-                    {pendingPin && pendingPin.postId === post.id && (
-                      <div
-                        className="absolute z-40 p-3 bg-white border border-slate-200 shadow-2xl rounded-2xl w-64 -translate-x-1/2 -translate-y-1/2"
-                        style={{
-                          left: `${pendingPin.x * 100}%`,
-                          top: `${pendingPin.y * 100}%`,
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <span className="text-[10px] font-bold text-indigo-600 uppercase block mb-1">
-                          Add Pin Comment
-                        </span>
-                        <textarea
-                          value={commentText}
-                          onChange={(e) => setCommentText(e.target.value)}
-                          placeholder="Type feedback..."
-                          autoFocus
-                          rows={2}
-                          className="w-full p-2 text-xs rounded-lg border border-slate-200 bg-slate-50 text-slate-900 focus:outline-none focus:border-slate-900"
-                        />
-                        <div className="flex items-center justify-end gap-1.5 mt-2">
-                          <button
-                            onClick={() => setPendingPin(null)}
-                            className="px-2 py-1 text-[11px] font-semibold text-slate-500 hover:text-slate-900"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            onClick={submitPinComment}
-                            className="px-3 py-1 rounded-lg bg-indigo-600 text-white text-[11px] font-semibold hover:bg-indigo-700 shadow-xs"
-                          >
-                            Save
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Footer */}
-                  <div className="p-2.5 border-t border-slate-100 flex items-center justify-between text-xs bg-white">
-                    <span className="font-mono text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-700 font-semibold">
-                      {post.preset}
-                    </span>
-                    <span className="text-[10px] font-bold text-indigo-600 flex items-center gap-1">
-                      <span>Connected to Chat Node</span>
-                      <Zap className="w-3 h-3 text-indigo-600" />
-                    </span>
-                  </div>
+                    </div>
+                  )}
                 </div>
 
-                {/* ── 2. CONNECTED COMETCHAT ITERATION NODE (n8n Style) ── */}
+                {/* ── 2. CONNECTED COMETCHAT ITERATION NODE ── */}
                 <div
                   onMouseDown={(e) => startDrag(e, post.id, 'chat')}
                   className="absolute w-[360px] rounded-2xl bg-white border border-indigo-200 shadow-2xl overflow-hidden z-20 cursor-grab active:cursor-grabbing"
@@ -605,7 +817,7 @@ export function CanvasWorkspace() {
                   </div>
 
                   {/* Node Message Body */}
-                  <div className="p-3 h-48 overflow-y-auto space-y-2 bg-white text-xs">
+                  <div className="p-3 h-52 overflow-y-auto space-y-2 bg-white text-xs">
                     {currentTab === 'pins' ? (
                       /* Pin List */
                       <div className="space-y-1.5">

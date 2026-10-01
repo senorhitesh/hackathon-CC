@@ -40,6 +40,7 @@
         "@repo/cometchat-client": "*",
         "@repo/types": "*",
         "@repo/ui": "*",
+        "@supabase/supabase-js": "^2.117.2",
         "lucide-react": "^0.525.0",
         "next": "16.3.4",
         "react": "19.2.8",

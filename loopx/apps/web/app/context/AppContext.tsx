@@ -372,6 +372,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       dispatch({ type: 'SET_USER', user: clientUser });
     }
 
+    // Check Supabase Auth session for Admin
+    import('../lib/supabaseClient').then(({ supabase }) => {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.user) {
+          const adminUser: ActiveUser & { role: UserRole } = {
+            uid: session.user.id,
+            name: session.user.user_metadata?.full_name || session.user.email || 'Studio Admin',
+            status: 'ONLINE',
+            role: 'owner',
+          };
+          dispatch({ type: 'SET_USER', user: adminUser });
+        }
+      });
+    });
+
     // LocalStorage rooms
     const savedRooms = localStorage.getItem('loopx_rooms');
     if (savedRooms) {

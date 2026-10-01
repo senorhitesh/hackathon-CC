@@ -324,10 +324,10 @@ export function CanvasWorkspace() {
 
       {/* ── n8n NODE GRAPH CANVAS AREA ── */}
       <div
-        className="w-full h-full relative transform-gpu transition-transform duration-75"
+        className="absolute inset-0 w-full h-full transform-gpu transition-transform duration-75 pointer-events-auto"
         style={{
           transform: `translate3d(${panOffset.x}px, ${panOffset.y}px, 0) scale(${zoom / 100})`,
-          transformOrigin: '0 0',
+          transformOrigin: '50% 50%',
         }}
       >
         {/* SVG Bezier Wire Connections between Post Nodes & Chat Nodes */}

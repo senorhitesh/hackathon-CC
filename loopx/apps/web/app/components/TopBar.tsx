@@ -5,18 +5,15 @@ import { useAppContext } from '../context/AppContext';
 import {
   ChevronDown,
   Share2,
-  Phone,
-  PhoneOff,
   User,
   ShieldCheck,
   Plus,
   Check,
-  Sparkles,
 } from 'lucide-react';
 
 export function TopBar() {
   const { state, dispatch } = useAppContext();
-  const { currentUser, roomId, sessionName, rooms, huddleActive } = state;
+  const { currentUser, roomId, sessionName, rooms } = state;
   const [copied, setCopied] = useState(false);
   const [boardDropdownOpen, setBoardDropdownOpen] = useState(false);
 
@@ -29,13 +26,9 @@ export function TopBar() {
     setTimeout(() => setCopied(false), 2000);
   }
 
-  function toggleHuddle() {
-    dispatch({ type: 'SET_HUDDLE_ACTIVE', active: !huddleActive });
-  }
-
   return (
     <header className="h-14 bg-white border-b border-slate-200 px-4 flex items-center justify-between z-40 flex-shrink-0 gap-3">
-      {/* Left: Brand Logo + Board Switcher (matching Image 1 screenshot) */}
+      {/* Left: Brand Logo + Board Switcher */}
       <div className="flex items-center gap-3 min-w-0">
         <div className="flex items-center gap-2 flex-shrink-0">
           <img
@@ -50,7 +43,7 @@ export function TopBar() {
 
         <div className="w-px h-5 bg-slate-200 flex-shrink-0" />
 
-        {/* Board Switcher Dropdown (Image 1 style) */}
+        {/* Board Switcher Dropdown */}
         <div className="relative">
           <button
             onClick={() => setBoardDropdownOpen(!boardDropdownOpen)}
@@ -119,28 +112,6 @@ export function TopBar() {
             <>
               <Share2 className="w-3.5 h-3.5 text-slate-500" />
               <span className="hidden sm:inline">Share Link</span>
-            </>
-          )}
-        </button>
-
-        {/* Voice Huddle Call Button */}
-        <button
-          onClick={toggleHuddle}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-            huddleActive
-              ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm'
-              : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-          }`}
-        >
-          {huddleActive ? (
-            <>
-              <PhoneOff className="w-3.5 h-3.5" />
-              <span>Leave Call</span>
-            </>
-          ) : (
-            <>
-              <Phone className="w-3.5 h-3.5 text-slate-500" />
-              <span className="hidden sm:inline">Voice Huddle</span>
             </>
           )}
         </button>

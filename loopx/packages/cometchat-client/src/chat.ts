@@ -46,7 +46,7 @@ export async function initCometChat(): Promise<boolean> {
 
   if (!config) {
     console.info(
-      '[AdProof] CometChat credentials not found — running in collaborative simulation mode.',
+      '[loopx] CometChat credentials not found — running in collaborative simulation mode.',
     );
     _isMockMode = true;
     _chatInitialized = true;
@@ -64,10 +64,10 @@ export async function initCometChat(): Promise<boolean> {
     await sdk.init(config.appId, appSettings);
     _chatInitialized = true;
     _isMockMode = false;
-    console.info('[AdProof] CometChat initialized successfully.');
+    console.info('[loopx] CometChat initialized successfully.');
     return true;
   } catch (err) {
-    console.error('[AdProof] CometChat init failed, falling back to simulation mode:', err);
+    console.error('[loopx] CometChat init failed, falling back to simulation mode:', err);
     _isMockMode = true;
     _chatInitialized = true;
     return false;

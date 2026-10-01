@@ -1,5 +1,5 @@
 // ─── Mock / Simulation Mode ─────────────────────────────────────────────────────
-// When CometChat credentials are not provided, AdProof operates in collaborative
+// When CometChat credentials are not provided, loopx operates in collaborative
 // simulation mode — all real-time events are dispatched locally via a broadcast
 // channel so two browser tabs still behave like two live collaborators.
 
@@ -39,19 +39,19 @@ export const MOCK_USERS: ActiveUser[] = [
 export function getMockCurrentUser(): ActiveUser {
   if (typeof window === 'undefined') return MOCK_USERS[0]!;
 
-  const stored = sessionStorage.getItem('adproof_mock_uid');
+  const stored = sessionStorage.getItem('loopx_mock_uid');
   if (stored) {
     return MOCK_USERS.find((u) => u.uid === stored) ?? MOCK_USERS[0]!;
   }
   // Assign a random user to this tab
   const pick = MOCK_USERS[Math.floor(Math.random() * MOCK_USERS.length)]!;
-  sessionStorage.setItem('adproof_mock_uid', pick.uid);
+  sessionStorage.setItem('loopx_mock_uid', pick.uid);
   return pick;
 }
 
 // ─── BroadcastChannel Event Bus ────────────────────────────────────────────────
 
-const CHANNEL_NAME = 'adproof_mock_channel';
+const CHANNEL_NAME = 'loopx_mock_channel';
 
 export type MockBroadcastEvent =
   | { type: 'ANNOTATION_CREATED'; annotation: PinAnnotation }

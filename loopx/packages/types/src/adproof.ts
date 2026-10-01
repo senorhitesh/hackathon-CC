@@ -161,14 +161,43 @@ export interface BrandAsset {
 
 // ─── App State Contracts ───────────────────────────────────────────────────────
 
+export type UserRole = 'owner' | 'client';
+
+export interface BoardPost {
+  id: string;
+  roomId: string;
+  title: string;
+  description?: string;
+  mediaUrl: string;
+  mediaType: 'image' | 'video';
+  preset: PlatformPreset;
+  status: 'DRAFT' | 'IN_REVIEW' | 'CHANGES_REQUESTED' | 'APPROVED';
+  createdBy: string;
+  createdByName: string;
+  createdAt: number;
+}
+
+export interface BoardRoom {
+  id: string;
+  name: string;
+  shareUrl: string;
+  ownerName: string;
+  createdAt: number;
+}
+
 export interface AdProofSession {
   roomId: string;
   sessionName: string;
-  currentUser: ActiveUser;
+  currentUser: ActiveUser & { role?: UserRole };
   activePreset: PlatformPreset;
   canvasElements: CanvasElement[];
   annotations: PinAnnotation[];
   activeUsers: ActiveUser[];
   huddleActive: boolean;
   huddleParticipants: HuddleParticipant[];
+  posts?: BoardPost[];
+  activePostId?: string | null;
+  rooms?: BoardRoom[];
 }
+
+export type LoopXSession = AdProofSession;

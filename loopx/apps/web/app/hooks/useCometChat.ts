@@ -76,7 +76,7 @@ export function useCometChat() {
       }
 
       // Step 5: Add annotation listener
-      const listenerId = `adproof_annotations_${state.roomId}`;
+      const listenerId = `loopx_annotations_${state.roomId}`;
       cleanupAnnotationListener = await addAnnotationListener(listenerId, {
         onAnnotationCreated: (annotation: PinAnnotation) => {
           // Only add if not already in state (prevents duplicating own sends)

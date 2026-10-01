@@ -97,7 +97,7 @@ export function CanvasArtboard() {
         const { sendAnnotation } = await import('@repo/cometchat-client');
         await sendAnnotation(state.roomId, annotation, 'CREATE');
       } catch (err) {
-        console.error('[AdProof] Failed to send annotation:', err);
+        console.error('[loopx] Failed to send annotation:', err);
       }
 
       setPendingPin(null);

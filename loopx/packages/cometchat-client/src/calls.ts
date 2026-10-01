@@ -44,7 +44,7 @@ export async function initCometChatCalls(): Promise<boolean> {
     _callsInitialized = true;
     return true;
   } catch (err) {
-    console.error('[AdProof Calls] Init failed:', err);
+    console.error('[loopx Calls] Init failed:', err);
     return false;
   }
 }
@@ -142,7 +142,7 @@ export async function leaveHuddle(sessionId?: string): Promise<void> {
     const sdk = await getCallsSDK();
     await sdk.endSession();
   } catch (err) {
-    console.error('[AdProof Calls] Leave huddle failed:', err);
+    console.error('[loopx Calls] Leave huddle failed:', err);
   }
 }
 

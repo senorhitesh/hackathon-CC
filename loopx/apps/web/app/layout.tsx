@@ -16,11 +16,13 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: 'AdProof — Real-Time Creative Review',
+  title: 'loopx — Real-Time Creative Review',
   description:
     'Collaborative ad proofing canvas with real-time contextual annotations, voice huddles, and multi-format support. Powered by CometChat.',
   icons: {
     icon: '/loogx-logo&favicon.png',
+    shortcut: '/loogx-logo&favicon.png',
+    apple: '/loogx-logo&favicon.png',
   },
 };
 

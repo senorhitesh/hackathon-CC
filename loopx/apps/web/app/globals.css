@@ -2,19 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── AdProof Design System Base ──────────────────────────────────────────────── */
+/* ─── loopx Design System Base ──────────────────────────────────────────────── */
 
 :root {
-  --ap-bg: #09090b;
-  --ap-surface: #18181b;
-  --ap-border: #27272a;
-  --ap-hover: #3f3f46;
-  --ap-muted: #71717a;
-  --ap-fg: #fafafa;
-  --ap-accent: #6366f1;
-  --ap-accent-hover: #818cf8;
+  --ap-bg: #f8fafc;
+  --ap-surface: #ffffff;
+  --ap-border: #e2e8f0;
+  --ap-hover: #f1f5f9;
+  --ap-muted: #64748b;
+  --ap-fg: #0f172a;
+  --ap-accent: #0f172a;
+  --ap-accent-hover: #334155;
   --pin-open: #6366f1;
-  --pin-resolved: #22c55e;
+  --pin-resolved: #16a34a;
 }
 
 *,
@@ -26,7 +26,7 @@
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
@@ -40,6 +40,14 @@ body {
   max-height: 100dvh;
 }
 
+/* ─── Dot Grid Canvas Pattern ────────────────────────────────────────────────── */
+
+.dot-canvas {
+  background-color: #f8fafc;
+  background-image: radial-gradient(#cbd5e1 1.2px, transparent 1.2px);
+  background-size: 20px 20px;
+}
+
 /* ─── Scrollbars ────────────────────────────────────────────────────────────── */
 
 ::-webkit-scrollbar {
@@ -50,18 +58,18 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #3f3f46;
+  background: #cbd5e1;
   border-radius: 999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #52525b;
+  background: #94a3b8;
 }
 
 /* ─── Selection ─────────────────────────────────────────────────────────────── */
 
 ::selection {
-  background: #6366f130;
-  color: #fafafa;
+  background: #6366f125;
+  color: #0f172a;
 }
 
 /* ─── Pin Cursor ────────────────────────────────────────────────────────────── */
@@ -74,9 +82,9 @@ body {
 
 .artboard-shadow {
   box-shadow:
-    0 0 0 1px #27272a,
-    0 20px 60px rgba(0, 0, 0, 0.6),
-    0 4px 16px rgba(0, 0, 0, 0.4);
+    0 0 0 1px #e2e8f0,
+    0 10px 30px -5px rgba(0, 0, 0, 0.08),
+    0 4px 12px -2px rgba(0, 0, 0, 0.04);
 }
 
 /* ─── Pin Marker ────────────────────────────────────────────────────────────── */

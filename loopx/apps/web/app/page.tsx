@@ -1,36 +1,36 @@
 'use client';
 
-import { useEffect } from 'react';
+import React from 'react';
 import { TopBar } from './components/TopBar';
-import { BrandAssetDrawer } from './components/BrandAssetDrawer';
-import { CanvasArtboard } from './components/CanvasArtboard';
-import { ReviewRail } from './components/ReviewRail';
-import { VoiceHuddleBar } from './components/VoiceHuddleBar';
-import { useCometChat } from './hooks/useCometChat';
+import { LeftSidebar } from './components/LeftSidebar';
+import { CanvasWorkspace } from './components/CanvasWorkspace';
+import { PostChatPanel } from './components/PostChatPanel';
+import { LoginModal } from './components/LoginModal';
+import { CreateRoomModal } from './components/CreateRoomModal';
+import { CreatePostModal } from './components/CreatePostModal';
 
-export default function AdProofPage() {
-  // Initialize CometChat and all real-time listeners
-  useCometChat();
-
+export default function LoopXPage() {
   return (
-    <div className="flex flex-col h-dvh overflow-hidden bg-canvas-bg">
-      {/* ── Top Bar ── */}
+    <div className="flex flex-col h-dvh overflow-hidden bg-slate-50 text-slate-900 font-sans">
+      {/* ── Top Bar (Board Switcher & Actions) ── */}
       <TopBar />
 
       {/* ── Main Workspace ── */}
-      <div className="flex flex-1 min-h-0">
-        {/* Left: Brand Asset Drawer */}
-        <BrandAssetDrawer />
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* Left: Boards & Assets Sidebar (Wireframe Image 5 Left Panel) */}
+        <LeftSidebar />
 
-        {/* Center: Canvas Artboard */}
-        <CanvasArtboard />
+        {/* Center: Dot Grid Canvas & Posts Gallery (Wireframe Image 5 Center Canvas) */}
+        <CanvasWorkspace />
 
-        {/* Right: Review Rail */}
-        <ReviewRail />
+        {/* Right: Dedicated CometChat Chat & AI Iteration Rail (Wireframe Image 5 Right Panel) */}
+        <PostChatPanel />
       </div>
 
-      {/* ── Floating Huddle Bar (rendered above everything when active) ── */}
-      <VoiceHuddleBar />
+      {/* ── Interactive Modals ── */}
+      <LoginModal />
+      <CreateRoomModal />
+      <CreatePostModal />
     </div>
   );
 }

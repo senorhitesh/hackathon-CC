@@ -9,20 +9,22 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // AdProof Design System — zinc dark palette
+        // loopx Design System — light studio palette (Linear / Figma / Botera style)
         canvas: {
-          bg: '#09090b',       // zinc-950 — main app background
-          surface: '#18181b',  // zinc-900 — panels and cards
-          border: '#27272a',   // zinc-800 — default borders
-          hover: '#3f3f46',    // zinc-700 — hover states
-          muted: '#71717a',    // zinc-500 — muted text
-          subtle: '#52525b',   // zinc-600 — subtle text
+          bg: '#f8fafc',       // slate-50 — light workspace background
+          surface: '#ffffff',  // white — panels, cards, modals
+          border: '#e2e8f0',   // slate-200 — light borders
+          hover: '#f1f5f9',    // slate-100 — hover states
+          fg: '#0f172a',       // slate-900 — dark text
+          muted: '#64748b',    // slate-500 — secondary text
+          subtle: '#94a3b8',   // slate-400 — muted labels
         },
         accent: {
-          DEFAULT: '#6366f1',  // indigo-500
-          hover: '#818cf8',    // indigo-400
-          dim: '#312e81',      // indigo-900 — for subtle backgrounds
-          violet: '#8b5cf6',   // violet-500
+          DEFAULT: '#0f172a',  // slate-900 — primary dark button accent
+          hover: '#334155',    // slate-700
+          blue: '#3b82f6',     // blue-500
+          indigo: '#6366f1',   // indigo-500
+          purple: '#8b5cf6',   // violet-500
         },
         pin: {
           open: '#6366f1',     // indigo for open pins

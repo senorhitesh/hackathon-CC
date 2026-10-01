@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   Plus,
   Check,
+  LayoutGrid,
 } from 'lucide-react';
 
 export function TopBar() {
@@ -28,20 +29,32 @@ export function TopBar() {
 
   return (
     <header className="h-14 bg-white border-b border-slate-200 px-4 flex items-center justify-between z-40 flex-shrink-0 gap-3">
-      {/* Left: Brand Logo + Board Switcher */}
+      {/* Left: Brand Logo + Dashboard Link + Board Switcher */}
       <div className="flex items-center gap-3 min-w-0">
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <a href="/dashboard" className="flex items-center gap-2 flex-shrink-0 group">
           <img
             src="/loogx-logo&favicon.png"
             alt="loopx logo"
-            className="w-7 h-7 object-contain rounded-md border border-slate-200"
+            className="w-7 h-7 object-contain rounded-md border border-slate-200 group-hover:scale-105 transition-transform"
           />
           <span className="font-bold text-sm text-slate-900 tracking-tight hidden sm:block">
             loopx
           </span>
-        </div>
+        </a>
 
         <div className="w-px h-5 bg-slate-200 flex-shrink-0" />
+
+        {/* Dashboard Return Button */}
+        <a
+          href="/dashboard"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-700 transition-all shadow-2xs"
+          title="Return to Admin Sessions Dashboard"
+        >
+          <LayoutGrid className="w-3.5 h-3.5 text-indigo-600" />
+          <span className="hidden md:inline">Dashboard</span>
+        </a>
+
+        <div className="w-px h-5 bg-slate-200 flex-shrink-0 hidden md:block" />
 
         {/* Board Switcher Dropdown */}
         <div className="relative">
@@ -49,7 +62,7 @@ export function TopBar() {
             onClick={() => setBoardDropdownOpen(!boardDropdownOpen)}
             className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 text-xs font-semibold text-slate-800 transition-colors"
           >
-            <span className="truncate max-w-[160px] sm:max-w-[220px]">
+            <span className="truncate max-w-[140px] sm:max-w-[200px]">
               {sessionName || 'My Project / Board 1'}
             </span>
             <ChevronDown className="w-3.5 h-3.5 text-slate-400" />

@@ -33,10 +33,10 @@ export default function LandingPage() {
 
         <div className="flex items-center gap-3">
           <Link
-            href="/app"
+            href="/dashboard"
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-md transition-all group"
           >
-            <span>Launch Studio Workspace</span>
+            <span>Admin Sessions Dashboard</span>
             <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
           </Link>
         </div>
@@ -66,14 +66,14 @@ export default function LandingPage() {
         {/* Action Buttons */}
         <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3.5">
           <Link
-            href="/app"
+            href="/dashboard"
             className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold shadow-lg shadow-slate-900/10 flex items-center justify-center gap-2 group transition-all"
           >
-            <span>Open Studio Canvas</span>
+            <span>Open Admin Dashboard</span>
             <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
           </Link>
           <Link
-            href="/app?action=login"
+            href="/login"
             className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-white border border-slate-200 hover:bg-slate-100 text-slate-800 text-sm font-semibold transition-all shadow-2xs flex items-center justify-center gap-2"
           >
             <ShieldCheck className="w-4 h-4 text-indigo-600" />

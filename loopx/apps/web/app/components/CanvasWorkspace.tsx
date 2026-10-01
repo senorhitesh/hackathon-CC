@@ -27,6 +27,7 @@ import {
   BarChart2,
   X,
   Play,
+  Trash2,
 } from 'lucide-react';
 import type { BoardPost } from '@repo/types';
 
@@ -68,10 +69,46 @@ export function CanvasWorkspace() {
   // Chat Node positions map
   const [chatNodePositions, setChatNodePositions] = useState<Record<string, { x: number; y: number }>>({});
 
+  // Highlighted Post Nodes state (glow effect)
+  const [highlightedPostIds, setHighlightedPostIds] = useState<Record<string, boolean>>({});
+
   // Chat Node messages & input state per post
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [inputTexts, setInputTexts] = useState<Record<string, string>>({});
-  const [nodeTabs, setNodeTabs] = useState<Record<string, 'chat' | 'ai' | 'pins'>>({});
+
+  // Delete Post Node
+  async function handleDeletePost(postId: string) {
+    if (!confirm('Are you sure you want to delete this post node?')) return;
+    try {
+      await supabase.from('posts').delete().eq('id', postId);
+    } catch (_) {}
+    dispatch({
+      type: 'SET_POSTS',
+      posts: posts.filter((p) => p.id !== postId),
+    });
+    setOpenChatNodes((prev) => {
+      const copy = { ...prev };
+      delete copy[postId];
+      return copy;
+    });
+  }
+
+  // Delete / Clear Chat Node Messages
+  async function handleDeleteChat(postId: string) {
+    if (!confirm('Are you sure you want to clear chat messages for this node?')) return;
+    try {
+      await supabase.from('messages').delete().eq('post_id', postId);
+    } catch (_) {}
+    setChatMessages((prev) => prev.filter((m) => m.postId !== postId));
+  }
+
+  // Toggle Highlight for Post Node
+  function toggleHighlightPost(postId: string) {
+    setHighlightedPostIds((prev) => ({
+      ...prev,
+      [postId]: !prev[postId],
+    }));
+  }
 
   // Fetch messages from Supabase DB on mount & initialize CometChat SDK
   useEffect(() => {
@@ -294,9 +331,8 @@ export function CanvasWorkspace() {
       } catch (_) {}
     })();
 
-    // AI Agent automatic response trigger
-    const tab = nodeTabs[postId] || 'chat';
-    if (tab === 'ai' || text.toLowerCase().includes('ai') || text.toLowerCase().includes('copy')) {
+    // AI Agent response if mentioned
+    if (text.toLowerCase().includes('ai') || text.toLowerCase().includes('copy')) {
       setTimeout(() => {
         const aiMsg: ChatMessage = {
           id: `ai_${Date.now()}`,
@@ -596,17 +632,18 @@ export function CanvasWorkspace() {
 
         <div className="w-px h-4 bg-slate-200" />
 
-        {/* Pin Feedback Toggle */}
+        {/* Highlight Post Toggle */}
         <button
-          onClick={() => dispatch({ type: 'SET_PIN_MODE', active: !pinModeActive })}
+          onClick={() => activePostId && toggleHighlightPost(activePostId)}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
-            pinModeActive
-              ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-500/20'
+            activePostId && highlightedPostIds[activePostId]
+              ? 'bg-amber-500 border-amber-500 text-white shadow-md shadow-amber-500/30 animate-pulse'
               : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
           }`}
+          title="Toggle Outer Glow Highlight for selected post"
         >
-          <Pin className="w-3.5 h-3.5" />
-          <span>{pinModeActive ? 'Click Image to Pin...' : 'Pin Feedback'}</span>
+          <Sparkles className="w-3.5 h-3.5" />
+          <span>{activePostId && highlightedPostIds[activePostId] ? 'Post Highlighted ✨' : 'Highlight Post'}</span>
         </button>
 
         <div className="w-px h-4 bg-slate-200" />
@@ -730,15 +767,16 @@ export function CanvasWorkspace() {
             };
 
             const pMessages = chatMessages.filter((m) => m.postId === post.id);
-            const currentTab = nodeTabs[post.id] || 'chat';
 
             return (
               <React.Fragment key={post.id}>
                 {/* ── 1. AUTHENTIC SOCIAL MEDIA POST NODE ── */}
                 <div
                   onMouseDown={(e) => startDrag(e, post.id, 'post')}
-                  className={`absolute w-[400px] rounded-2xl bg-white border transition-shadow duration-150 shadow-xl overflow-hidden cursor-grab active:cursor-grabbing ${
-                    isSelected
+                  className={`absolute w-[400px] rounded-2xl bg-white border transition-all duration-200 shadow-xl overflow-hidden cursor-grab active:cursor-grabbing ${
+                    highlightedPostIds[post.id]
+                      ? 'border-indigo-600 ring-4 ring-indigo-500/80 shadow-[0_0_35px_rgba(99,102,241,0.6)] z-30 animate-pulse'
+                      : isSelected
                       ? 'border-indigo-600 outline outline-2 outline-indigo-500/30 shadow-2xl z-20'
                       : 'border-slate-200 hover:border-slate-300 z-10'
                   }`}
@@ -763,22 +801,47 @@ export function CanvasWorkspace() {
                         <span className="text-[9px] font-extrabold uppercase tracking-widest text-indigo-600 block">
                           {post.preset.replace('_', ' ')} POST
                         </span>
-                        <h3 className="text-xs font-bold text-slate-900 truncate max-w-[170px]">
+                        <h3 className="text-xs font-bold text-slate-900 truncate max-w-[140px]">
                           {post.title}
                         </h3>
                       </div>
                     </div>
-                    {getStatusBadge(post.status)}
+
+                    <div className="flex items-center gap-1.5">
+                      {getStatusBadge(post.status)}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeletePost(post.id);
+                        }}
+                        className="text-slate-400 hover:text-rose-600 p-1 rounded-md hover:bg-rose-50 transition-colors ml-1"
+                        title="Delete Post Node"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Render Authentic Social Media UI */}
                   {renderSocialMediaCard(post)}
 
-                  {/* Footer CTA: START CONVO / TOGGLE CONNECTED CHAT NODE */}
+                  {/* Footer CTA: START CONVO / TOGGLE HIGHLIGHT */}
                   <div className="p-2.5 border-t border-slate-100 flex items-center justify-between text-xs bg-slate-50">
-                    <span className="font-mono text-[10px] bg-slate-200/70 px-2 py-0.5 rounded text-slate-700 font-semibold">
-                      {post.preset}
-                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleHighlightPost(post.id);
+                      }}
+                      className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition-all border ${
+                        highlightedPostIds[post.id]
+                          ? 'bg-amber-100 text-amber-800 border-amber-300 shadow-2xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                      <span>{highlightedPostIds[post.id] ? 'Glow On ✨' : 'Highlight'}</span>
+                    </button>
 
                     <button
                       type="button"
@@ -802,43 +865,9 @@ export function CanvasWorkspace() {
                       )}
                     </button>
                   </div>
-
-                  {/* Pending Pin Comment Floating Box */}
-                  {pendingPin && pendingPin.postId === post.id && (
-                    <div
-                      className="absolute z-40 p-3 bg-white border border-slate-200 shadow-2xl rounded-2xl w-64 -translate-x-1/2 -translate-y-1/2 top-1/2 left-1/2"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <span className="text-[10px] font-bold text-indigo-600 uppercase block mb-1">
-                        Add Pin Comment
-                      </span>
-                      <textarea
-                        value={commentText}
-                        onChange={(e) => setCommentText(e.target.value)}
-                        placeholder="Type feedback..."
-                        autoFocus
-                        rows={2}
-                        className="w-full p-2 text-xs rounded-lg border border-slate-200 bg-slate-50 text-slate-900 focus:outline-none focus:border-slate-900"
-                      />
-                      <div className="flex items-center justify-end gap-1.5 mt-2">
-                        <button
-                          onClick={() => setPendingPin(null)}
-                          className="px-2 py-1 text-[11px] font-semibold text-slate-500 hover:text-slate-900"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={submitPinComment}
-                          className="px-3 py-1 rounded-lg bg-indigo-600 text-white text-[11px] font-semibold hover:bg-indigo-700 shadow-xs"
-                        >
-                          Save
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
 
-                {/* ── 2. CONNECTED COMETCHAT ITERATION NODE (Created ONLY when clicking "Start Convo") ── */}
+                {/* ── 2. CONNECTED COMETCHAT ITERATION NODE ── */}
                 {isChatOpen && (
                   <div
                     onMouseDown={(e) => startDrag(e, post.id, 'chat')}
@@ -864,20 +893,31 @@ export function CanvasWorkspace() {
                           <span className="text-[9px] font-extrabold uppercase tracking-widest text-indigo-600 block">
                             COMETCHAT ITERATION NODE
                           </span>
-                          <h4 className="text-xs font-bold text-slate-900 truncate max-w-[150px]">
+                          <h4 className="text-xs font-bold text-slate-900 truncate max-w-[130px]">
                             {post.title}
                           </h4>
                         </div>
                       </div>
 
-                      {/* Close Chat Node Button */}
-                      <button
-                        onClick={(e) => toggleStartConvo(e, post.id)}
-                        className="text-slate-400 hover:text-slate-700 p-1 rounded-md hover:bg-slate-200/60"
-                        title="Close Chat Node"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteChat(post.id);
+                          }}
+                          className="text-slate-400 hover:text-rose-600 p-1 rounded-md hover:bg-rose-50 transition-colors"
+                          title="Delete / Clear Chat Messages"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={(e) => toggleStartConvo(e, post.id)}
+                          className="text-slate-400 hover:text-slate-700 p-1 rounded-md hover:bg-slate-200/60"
+                          title="Close Chat Node"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Status Picker Inside Node */}
@@ -897,94 +937,27 @@ export function CanvasWorkspace() {
                       ))}
                     </div>
 
-                    {/* Tab Switcher inside Node */}
-                    <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 border-b border-slate-200 text-[11px]">
-                      <button
-                        onClick={() => setNodeTabs((prev) => ({ ...prev, [post.id]: 'chat' }))}
-                        className={`flex items-center justify-center gap-1 py-1 font-semibold rounded-md transition-all ${
-                          currentTab === 'chat'
-                            ? 'bg-white text-slate-900 shadow-xs'
-                            : 'text-slate-500 hover:text-slate-900'
-                        }`}
-                      >
-                        <MessageSquare className="w-3 h-3 text-indigo-600" />
-                        <span>Chat</span>
-                      </button>
-                      <button
-                        onClick={() => setNodeTabs((prev) => ({ ...prev, [post.id]: 'ai' }))}
-                        className={`flex items-center justify-center gap-1 py-1 font-semibold rounded-md transition-all ${
-                          currentTab === 'ai'
-                            ? 'bg-white text-slate-900 shadow-xs'
-                            : 'text-slate-500 hover:text-slate-900'
-                        }`}
-                      >
-                        <Bot className="w-3 h-3 text-purple-600" />
-                        <span>AI Agent</span>
-                      </button>
-                      <button
-                        onClick={() => setNodeTabs((prev) => ({ ...prev, [post.id]: 'pins' }))}
-                        className={`flex items-center justify-center gap-1 py-1 font-semibold rounded-md transition-all ${
-                          currentTab === 'pins'
-                            ? 'bg-white text-slate-900 shadow-xs'
-                            : 'text-slate-500 hover:text-slate-900'
-                        }`}
-                      >
-                        <Pin className="w-3 h-3 text-amber-600" />
-                        <span>Pins</span>
-                      </button>
-                    </div>
-
-                    {/* Node Message Body */}
-                    <div className="p-3 h-52 overflow-y-auto space-y-2 bg-white text-xs">
-                      {currentTab === 'pins' ? (
-                        <div className="space-y-1.5">
-                          {annotations.length === 0 ? (
-                            <div className="text-center py-6 text-slate-400 text-[11px]">
-                              No pin feedback added. Click "Pin Feedback" to add pin comments.
-                            </div>
-                          ) : (
-                            annotations.map((pin, pIdx) => (
-                              <div key={pin.id} className="p-2 rounded-lg bg-slate-50 border border-slate-200 text-[11px]">
-                                <div className="flex items-center justify-between mb-0.5">
-                                  <span className="font-bold text-slate-800">#{pIdx + 1} {pin.authorName}</span>
-                                  <span className="text-[9px] font-bold text-indigo-600">{pin.status}</span>
-                                </div>
-                                <p className="text-slate-600">{pin.comment}</p>
-                                {pin.status === 'OPEN' && (
-                                  <button
-                                    onClick={() => resolveAnnotation(pin.id)}
-                                    className="text-[9px] font-bold text-emerald-600 hover:underline mt-1 block"
-                                  >
-                                    Mark Resolved
-                                  </button>
-                                )}
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      ) : pMessages.length === 0 ? (
-                        <div className="text-center py-8 text-slate-400 text-[11px]">
-                          No messages in this CometChat node yet. Send a message or ask the AI Agent to start iterating!
+                    {/* Node Message Body (Clean Chat Stream) */}
+                    <div className="p-3 h-64 overflow-y-auto space-y-2 bg-white text-xs">
+                      {pMessages.length === 0 ? (
+                        <div className="text-center py-12 text-slate-400 text-[11px]">
+                          No messages in this CometChat node yet. Send a message to start iterating live!
                         </div>
                       ) : (
                         pMessages.map((msg) => (
                           <div
                             key={msg.id}
-                            className={`p-2 rounded-xl border ${
-                              msg.senderRole === 'ai'
-                                ? 'bg-purple-50 border-purple-200 text-purple-950'
-                                : msg.senderRole === 'owner'
-                                ? 'bg-slate-50 border-slate-200'
-                                : 'bg-indigo-50 border-indigo-100'
+                            className={`p-2.5 rounded-xl border ${
+                              msg.senderRole === 'owner'
+                                ? 'bg-slate-50 border-slate-200 text-slate-900'
+                                : 'bg-indigo-50 border-indigo-100 text-indigo-950'
                             }`}
                           >
-                            <div className="flex items-center justify-between text-[10px] mb-0.5">
-                              <span className="font-bold text-slate-900 flex items-center gap-1">
-                                {msg.senderRole === 'ai' && <Sparkles className="w-3 h-3 text-purple-600" />}
-                                {msg.senderName}
-                              </span>
+                            <div className="flex items-center justify-between text-[10px] mb-0.5 font-bold text-slate-800">
+                              <span>{msg.senderName}</span>
+                              <span className="text-[9px] uppercase font-mono text-slate-400">{msg.senderRole}</span>
                             </div>
-                            <p className="text-[11px] text-slate-700 whitespace-pre-wrap">{msg.text}</p>
+                            <p className="text-[11px] leading-relaxed whitespace-pre-wrap">{msg.text}</p>
                           </div>
                         ))
                       )}
@@ -997,7 +970,7 @@ export function CanvasWorkspace() {
                           type="text"
                           value={inputTexts[post.id] || ''}
                           onChange={(e) => setInputTexts((prev) => ({ ...prev, [post.id]: e.target.value }))}
-                          placeholder={currentTab === 'ai' ? 'Ask AI Agent for copy ideas...' : 'Type message to iterate...'}
+                          placeholder="Type message to iterate..."
                           className="w-full pl-2.5 pr-8 py-2 rounded-lg border border-slate-200 bg-white text-xs text-slate-900 focus:outline-none focus:border-slate-900"
                         />
                         <button

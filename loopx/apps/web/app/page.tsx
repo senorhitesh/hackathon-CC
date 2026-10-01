@@ -4,7 +4,6 @@ import React from 'react';
 import { TopBar } from './components/TopBar';
 import { LeftSidebar } from './components/LeftSidebar';
 import { CanvasWorkspace } from './components/CanvasWorkspace';
-import { PostChatPanel } from './components/PostChatPanel';
 import { LoginModal } from './components/LoginModal';
 import { CreateRoomModal } from './components/CreateRoomModal';
 import { CreatePostModal } from './components/CreatePostModal';
@@ -17,14 +16,11 @@ export default function LoopXPage() {
 
       {/* ── Main Workspace ── */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
-        {/* Left: Boards & Assets Sidebar (Wireframe Image 5 Left Panel) */}
+        {/* Left: Boards & Assets Sidebar */}
         <LeftSidebar />
 
-        {/* Center: Dot Grid Canvas & Posts Gallery (Wireframe Image 5 Center Canvas) */}
+        {/* Center: Infinite Excalidraw / n8n Node Canvas with connected Post & Chat Nodes */}
         <CanvasWorkspace />
-
-        {/* Right: Dedicated CometChat Chat & AI Iteration Rail (Wireframe Image 5 Right Panel) */}
-        <PostChatPanel />
       </div>
 
       {/* ── Interactive Modals ── */}

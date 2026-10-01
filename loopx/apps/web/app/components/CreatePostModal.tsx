@@ -12,18 +12,12 @@ const PRESET_OPTIONS: { id: PlatformPreset; label: string; ratio: string }[] = [
   { id: 'LINKEDIN_POST', label: 'LinkedIn Post', ratio: '1200:628' },
 ];
 
-const DEMO_IMAGES = [
-  'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1080&q=80',
-  'https://images.unsplash.com/photo-1519046904884-53103b34b206?auto=format&fit=crop&w=1080&q=80',
-  'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=1080&q=80',
-];
-
 export function CreatePostModal() {
   const { state, dispatch, createPost } = useAppContext();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [preset, setPreset] = useState<PlatformPreset>('IG_SQUARE');
-  const [mediaUrl, setMediaUrl] = useState(DEMO_IMAGES[0]!);
+  const [mediaUrl, setMediaUrl] = useState('');
   const [isUploading, setIsUploading] = useState(false);
 
   if (!state.isCreatePostOpen) return null;

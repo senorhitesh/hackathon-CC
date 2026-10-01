@@ -38,6 +38,8 @@ interface ChatMessage {
   timestamp: number;
 }
 
+import { supabase } from '../lib/supabaseClient';
+
 export function CanvasWorkspace() {
   const { state, dispatch, addAnnotation, resolveAnnotation } = useAppContext();
   const { posts, activePostId, pinModeActive, annotations, currentUser } = state;
@@ -56,27 +58,31 @@ export function CanvasWorkspace() {
   // Chat Node positions map
   const [chatNodePositions, setChatNodePositions] = useState<Record<string, { x: number; y: number }>>({});
 
-  // Chat Node messages & input state per post
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
-    {
-      id: 'msg_1',
-      postId: 'post_1',
-      senderName: 'Sarah Rivera (Owner)',
-      senderRole: 'owner',
-      text: 'Hey! Connected this CometChat node for post feedback. Let me know what you think!',
-      timestamp: Date.now() - 3600000,
-    },
-    {
-      id: 'msg_2',
-      postId: 'post_1',
-      senderName: 'Client Reviewer',
-      senderRole: 'client',
-      text: 'Looks awesome! Can we make the headline font size slightly bolder?',
-      timestamp: Date.now() - 1800000,
-    },
-  ]);
+  // Chat Node messages & input state per post (Empty by default — Supabase DB driven)
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [inputTexts, setInputTexts] = useState<Record<string, string>>({});
   const [nodeTabs, setNodeTabs] = useState<Record<string, 'chat' | 'ai' | 'pins'>>({});
+
+  // Fetch messages from Supabase DB on mount
+  useEffect(() => {
+    async function loadDbMessages() {
+      try {
+        const { data: dbMsgs } = await supabase.from('messages').select('*');
+        if (dbMsgs && dbMsgs.length > 0) {
+          const formatted: ChatMessage[] = dbMsgs.map((m: any) => ({
+            id: m.id,
+            postId: m.post_id || m.postId,
+            senderName: m.sender_name || m.senderName || 'Collaborator',
+            senderRole: m.sender_role || m.senderRole || 'owner',
+            text: m.text,
+            timestamp: m.timestamp ? new Date(m.timestamp).getTime() : Date.now(),
+          }));
+          setChatMessages(formatted);
+        }
+      } catch (_) {}
+    }
+    loadDbMessages();
+  }, []);
 
   // Pin annotation state
   const [commentText, setCommentText] = useState('');
@@ -209,6 +215,19 @@ export function CanvasWorkspace() {
 
     setChatMessages((prev) => [...prev, newMsg]);
     setInputTexts((prev) => ({ ...prev, [postId]: '' }));
+
+    // Save message to Supabase DB
+    (async () => {
+      try {
+        await supabase.from('messages').insert({
+          id: newMsg.id,
+          post_id: newMsg.postId,
+          sender_name: newMsg.senderName,
+          sender_role: newMsg.senderRole,
+          text: newMsg.text,
+        });
+      } catch (_) {}
+    })();
 
     // AI Agent automatic response trigger
     const tab = nodeTabs[postId] || 'chat';

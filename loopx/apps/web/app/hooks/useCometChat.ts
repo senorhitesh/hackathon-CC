@@ -31,8 +31,9 @@ export function useCometChat() {
   const mapSdkMessage = useCallback(
     (msg: any): ChatMessage | null => {
       try {
-        // Text messages
-        if (msg.getType?.() === 'text' || msg.type === 'text') {
+        const msgType = (msg.getType?.() || msg.type || '').toLowerCase();
+        // Text or media messages
+        if (msgType === 'text' || msgType === 'image' || msgType === 'video' || msgType === 'file' || msgType === 'media') {
           const senderUid = msg.getSender?.()?.getUid?.() || msg.sender?.uid || msg.senderUid || '';
           const rawName = msg.getSender?.()?.getName?.() || msg.sender?.name || msg.senderName;
           const shortId = (senderUid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '').slice(-4).toUpperCase() || '7F2A';
@@ -44,7 +45,7 @@ export function useCometChat() {
           const sentAt = msg.getSentAt?.() || msg.sentAt || Date.now() / 1000;
           const receiverId = msg.getReceiverId?.() || msg.receiverId || '';
 
-          // Read postId from metadata if present
+          // Read postId and media info from metadata if present
           let meta = msg.getMetadata?.() || msg.metadata || msg.data?.metadata;
           if (typeof meta === 'string') {
             try {
@@ -52,8 +53,11 @@ export function useCometChat() {
             } catch (_) {}
           }
           const postId = meta?.postId || receiverId || 'general';
+          const mediaUrl = meta?.mediaUrl || (typeof msg.getUrl === 'function' ? msg.getUrl() : msg.data?.url) || (msg.data?.attachments?.[0]?.url);
+          const mediaName = meta?.mediaName || (typeof msg.getName === 'function' ? msg.getName() : msg.data?.name) || (msg.data?.attachments?.[0]?.name);
+          const mediaType = meta?.mediaType || (msgType === 'video' ? 'video' : 'image');
 
-          if (!text) return null;
+          if (!text && !mediaUrl) return null;
 
           return {
             id: `cc_${id}`,
@@ -63,6 +67,9 @@ export function useCometChat() {
             senderRole: `ID: #${shortId}`,
             text,
             timestamp: typeof sentAt === 'number' && sentAt < 1e12 ? sentAt * 1000 : sentAt,
+            mediaUrl,
+            mediaName,
+            mediaType,
           };
         }
         return null;
@@ -242,8 +249,12 @@ export function useCometChat() {
 
   // ─── Send Chat Message via CometChat & BroadcastChannel ───────────────────
   const sendMessage = useCallback(
-    async (text: string, targetPostId?: string) => {
-      if (!text.trim()) return;
+    async (
+      text: string,
+      targetPostId?: string,
+      media?: { url: string; name?: string; type?: 'image' | 'video' | 'file' }
+    ) => {
+      if (!text.trim() && !media?.url) return;
 
       const { sendCometChatMessage, isMockMode } = await import('@repo/cometchat-client');
       const roomId = currentRoomRef.current;
@@ -263,6 +274,9 @@ export function useCometChat() {
         senderRole: `ID: #${shortId}`,
         text: text.trim(),
         timestamp: Date.now(),
+        mediaUrl: media?.url,
+        mediaName: media?.name,
+        mediaType: media?.type,
       };
 
       dispatch({ type: 'ADD_CHAT_MESSAGE', message: localMsg });
@@ -282,7 +296,12 @@ export function useCometChat() {
       // Send via CometChat SDK (network real-time sync with metadata)
       if (!isMockMode()) {
         try {
-          await sendCometChatMessage(roomId, text.trim(), 'group', { postId: effectivePostId });
+          await sendCometChatMessage(roomId, text.trim() || 'Shared media attachment', 'group', {
+            postId: effectivePostId,
+            mediaUrl: media?.url,
+            mediaName: media?.name,
+            mediaType: media?.type,
+          });
         } catch (err) {
           console.warn('[loopx] Failed to send CometChat message:', err);
         }

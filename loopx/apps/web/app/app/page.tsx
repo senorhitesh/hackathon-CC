@@ -13,7 +13,11 @@ import { useCometChat } from '../hooks/useCometChat';
 // ─── CometChat Context (exposes sendMessage to child components) ────────────
 
 interface CometChatContextValue {
-  sendMessage: (text: string, targetPostId?: string) => Promise<void>;
+  sendMessage: (
+    text: string,
+    targetPostId?: string,
+    media?: { url: string; name?: string; type?: 'image' | 'video' | 'file' }
+  ) => Promise<void>;
 }
 
 const CometChatContext = createContext<CometChatContextValue>({

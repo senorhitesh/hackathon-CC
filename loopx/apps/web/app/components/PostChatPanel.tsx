@@ -17,6 +17,8 @@ import {
   Paperclip,
   Mic,
   X,
+  Download,
+  Upload,
 } from './icons/Hugeicons';
 import type { BoardPost } from '@repo/types';
 
@@ -27,10 +29,23 @@ export function PostChatPanel() {
   const [inputText, setInputText] = useState('');
   const [isMinimized, setIsMinimized] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [selectedMedia, setSelectedMedia] = useState<{
+    file: File;
+    previewUrl: string;
+    name: string;
+    type: 'image' | 'video' | 'file';
+  } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const currentPostId = activePostId || (posts.length > 0 ? posts[0]?.id : null);
   const activePost = posts.find((p) => p.id === currentPostId);
+
+  // Derive clean ID-based display name for current user
+  const myShortId = (currentUser.uid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '').slice(-4).toUpperCase() || '7F2A';
+  const myDisplayName = (currentUser.name && currentUser.name !== 'Collaborator' && currentUser.name !== 'owner' && currentUser.name !== 'client')
+    ? currentUser.name
+    : `User #${myShortId}`;
 
   // Each post has its own unique chat thread
   const postMessages = currentPostId
@@ -41,17 +56,51 @@ export function PostChatPanel() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [postMessages.length]);
 
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const isVideo = file.type.startsWith('video');
+    const isImage = file.type.startsWith('image');
+    const mediaType: 'image' | 'video' | 'file' = isVideo ? 'video' : isImage ? 'image' : 'file';
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setSelectedMedia({
+        file,
+        previewUrl: reader.result as string,
+        name: file.name,
+        type: mediaType,
+      });
+    };
+    reader.readAsDataURL(file);
+  }
+
   async function handleSend(e?: React.FormEvent) {
     if (e) e.preventDefault();
-    if (!inputText.trim() || isSending) return;
+    if ((!inputText.trim() && !selectedMedia) || isSending) return;
 
     setIsSending(true);
     try {
-      await sendMessage(inputText.trim(), currentPostId || undefined);
+      await sendMessage(
+        inputText.trim(),
+        currentPostId || undefined,
+        selectedMedia
+          ? {
+              url: selectedMedia.previewUrl,
+              name: selectedMedia.name,
+              type: selectedMedia.type,
+            }
+          : undefined
+      );
     } catch (err) {
       console.warn('[loopx] Send message failed:', err);
     }
     setInputText('');
+    setSelectedMedia(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
     setIsSending(false);
   }
 
@@ -133,7 +182,7 @@ export function PostChatPanel() {
             </span>
           </div>
           <h2 className="text-sm font-semibold text-neutral-900">
-            Hi, {currentUser.name.split(' ')[0]} 👋
+            Hi, {myDisplayName} 👋
           </h2>
           <p className="text-xs text-neutral-500 mt-0.5 leading-relaxed">
             Collaborate with your partner on ad copy, visual assets, and approvals in real-time.
@@ -182,10 +231,23 @@ export function PostChatPanel() {
         {/* ── Active Conversation Stream Between the Two Users ── */}
         <div className="space-y-3">
           <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-neutral-400 px-1">
-            <span className="truncate max-w-[170px]">
+            <span className="truncate max-w-[140px]">
               {activePost ? `Thread: ${activePost.title}` : 'Workspace Thread'}
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              {activePost?.mediaUrl && (
+                <a
+                  href={activePost.mediaUrl}
+                  download={activePost.title ? `${activePost.title.toLowerCase().replace(/\s+/g, '-')}-asset` : 'creative-asset'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Download creative asset"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200/80 text-[9px] font-semibold transition-all hover:scale-105 active:scale-95 shadow-2xs"
+                >
+                  <Download className="w-2.5 h-2.5" />
+                  <span>Asset</span>
+                </a>
+              )}
               <span>{postMessages.length} updates</span>
               {postMessages.length > 0 && (
                 <button
@@ -235,13 +297,48 @@ export function PostChatPanel() {
                   </div>
 
                   <div
-                    className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-xs leading-relaxed shadow-xs ${
+                    className={`max-w-[88%] px-3.5 py-2.5 rounded-2xl text-xs leading-relaxed shadow-xs ${
                       isMe
                         ? 'bg-neutral-900 text-white rounded-br-xs'
                         : 'bg-neutral-100 text-neutral-800 rounded-bl-xs border border-neutral-200/80'
                     }`}
                   >
-                    <p className="whitespace-pre-wrap">{msg.text}</p>
+                    {msg.text && <p className="whitespace-pre-wrap">{msg.text}</p>}
+
+                    {/* Media Attachment */}
+                    {msg.mediaUrl && (
+                      <div className={`mt-2 rounded-xl overflow-hidden border ${isMe ? 'border-neutral-700 bg-neutral-800' : 'border-neutral-200 bg-white'} shadow-xs`}>
+                        {msg.mediaType === 'video' ? (
+                          <video
+                            src={msg.mediaUrl}
+                            controls
+                            className="w-full max-h-48 object-cover rounded-t-xl bg-black"
+                          />
+                        ) : (
+                          <img
+                            src={msg.mediaUrl}
+                            alt={msg.mediaName || 'Attached asset'}
+                            className="w-full max-h-52 object-cover rounded-t-xl cursor-pointer hover:opacity-95 transition-opacity"
+                            onClick={() => window.open(msg.mediaUrl, '_blank')}
+                          />
+                        )}
+                        <div className="px-2.5 py-1.5 flex items-center justify-between bg-neutral-900/90 text-white text-[10px]">
+                          <span className="truncate max-w-[120px] font-mono text-neutral-300">
+                            {msg.mediaName || (msg.mediaType === 'video' ? 'video-asset' : 'image-asset')}
+                          </span>
+                          <a
+                            href={msg.mediaUrl}
+                            download={msg.mediaName || 'downloaded-media'}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white/20 hover:bg-white/35 text-white font-medium transition-colors cursor-pointer"
+                          >
+                            <Download className="w-3 h-3" />
+                            <span>Download</span>
+                          </a>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -253,10 +350,53 @@ export function PostChatPanel() {
 
       {/* ── Bottom Floating Input Bar (Matching Image 1) ── */}
       <div className="p-3 bg-white border-t border-neutral-100">
+        {/* Hidden File Input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,video/*"
+          className="hidden"
+          onChange={handleFileSelect}
+        />
+
         <form
           onSubmit={handleSend}
           className="relative bg-neutral-50/90 hover:bg-neutral-50 border border-neutral-200/90 rounded-2xl p-2.5 transition-all focus-within:border-neutral-400 focus-within:bg-white shadow-xs"
         >
+          {/* Selected Media Preview Chip */}
+          {selectedMedia && (
+            <div className="mb-2 p-1.5 px-2 rounded-xl bg-blue-50/90 border border-blue-200/80 flex items-center justify-between text-xs animate-fade-in">
+              <div className="flex items-center gap-2 overflow-hidden">
+                {selectedMedia.type === 'video' ? (
+                  <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                    🎬
+                  </div>
+                ) : (
+                  <img
+                    src={selectedMedia.previewUrl}
+                    alt="attachment preview"
+                    className="w-8 h-8 rounded-lg object-cover border border-blue-200 shrink-0"
+                  />
+                )}
+                <div className="truncate">
+                  <p className="text-[11px] font-semibold text-blue-900 truncate max-w-[170px]">{selectedMedia.name}</p>
+                  <span className="text-[9px] text-blue-600 uppercase font-mono font-medium">{selectedMedia.type} attachment</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedMedia(null);
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                }}
+                className="w-5 h-5 rounded-full hover:bg-blue-200/70 text-blue-700 flex items-center justify-center shrink-0 transition-colors"
+                title="Remove attachment"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+
           <input
             type="text"
             value={inputText}
@@ -269,9 +409,13 @@ export function PostChatPanel() {
             <div className="flex items-center gap-1 text-neutral-500">
               <button
                 type="button"
-                onClick={() => dispatch({ type: 'TOGGLE_MODAL', modal: 'isCreatePostOpen', value: true })}
-                title="Add Image Node"
-                className="w-7 h-7 rounded-lg hover:bg-neutral-200/60 flex items-center justify-center transition-colors"
+                onClick={() => fileInputRef.current?.click()}
+                title="Upload Image or Video"
+                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                  selectedMedia
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'hover:bg-neutral-200/60 text-neutral-600 hover:text-neutral-900'
+                }`}
               >
                 <ImageIcon className="w-3.5 h-3.5" />
               </button>
@@ -305,9 +449,9 @@ export function PostChatPanel() {
 
             <button
               type="submit"
-              disabled={!inputText.trim() || isSending}
+              disabled={(!inputText.trim() && !selectedMedia) || isSending}
               className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
-                inputText.trim() && !isSending
+                (inputText.trim() || selectedMedia) && !isSending
                   ? 'bg-blue-500 hover:bg-blue-600 text-white shadow-md hover:scale-105 active:scale-95'
                   : 'bg-neutral-200 text-neutral-400 cursor-not-allowed'
               }`}
@@ -324,3 +468,4 @@ export function PostChatPanel() {
     </aside>
   );
 }
+

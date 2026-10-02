@@ -45,6 +45,9 @@ export interface ChatMessage {
   senderAvatar?: string;
   text: string;
   timestamp: number;
+  mediaUrl?: string;
+  mediaName?: string;
+  mediaType?: 'image' | 'video' | 'file';
 }
 
 export interface AppState extends AdProofSession {

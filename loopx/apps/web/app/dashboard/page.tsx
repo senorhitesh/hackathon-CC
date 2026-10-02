@@ -70,16 +70,11 @@ export default function AdminDashboardPage() {
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-neutral-200 px-6 py-3 flex items-center justify-between shadow-2xs">
         <div className="flex items-center gap-3">
           <Link href="/" className="flex items-center gap-2 group">
-            <div className="w-6 h-6 rounded bg-neutral-100 border border-neutral-200 flex items-center justify-center transition-colors group-hover:border-neutral-300">
-              <svg
-                className="w-3 h-3 fill-black"
-                viewBox="0 0 76 65"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path d="M37.5274 0L75.0548 65H0L37.5274 0Z" />
-              </svg>
-            </div>
+            <img
+              src="/loogx-logo&favicon.png"
+              alt="loopx logo"
+              className="w-6 h-6 rounded-md object-contain shadow-2xs"
+            />
             <span className="font-semibold text-sm tracking-tight text-neutral-900">
               loopx
             </span>

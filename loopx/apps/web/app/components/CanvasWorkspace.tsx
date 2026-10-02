@@ -631,7 +631,7 @@ export function CanvasWorkspace() {
 
       {/* ── Bottom Floating Action Bar (Sleek Studio Dock) ── */}
       <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 glass-dock rounded-2xl px-2.5 py-1.5 text-neutral-800 animate-fade-in pointer-events-auto font-sans">
-        {/* Aura Glow Highlight Toggle */}
+        {/* Moving Border Highlight Toggle */}
         <button
           onClick={() => activePost && togglePostHighlight(activePost.id)}
           disabled={!activePost}
@@ -640,10 +640,10 @@ export function CanvasWorkspace() {
               ? 'bg-purple-600 text-white shadow-xs font-semibold'
               : 'hover:bg-neutral-100 text-neutral-700'
           }`}
-          title="Toggle Aura Glow Highlight (H)"
+          title="Toggle Moving Border Highlight (H)"
         >
           <Sparkles className="w-3.5 h-3.5" />
-          <span className="text-[11px]">{activePost?.isHighlighted ? 'Aura Active' : 'Highlight'}</span>
+          <span className="text-[11px]">{activePost?.isHighlighted ? 'Highlighted' : 'Highlight'}</span>
           <kbd className={`text-[9px] font-mono px-1 py-0.2 rounded ${activePost?.isHighlighted ? 'bg-white/20 text-white' : 'bg-neutral-100 border border-neutral-200 text-neutral-600'}`}>H</kbd>
         </button>
 
@@ -829,18 +829,20 @@ export function CanvasWorkspace() {
                   {/* Category Pill Tag (Image 3 Style) */}
                   {getNodeCategoryBadge(post.status)}
 
-                  {/* Glowing Ambient Aura Backdrop when highlighted */}
+                  {/* Moving Border Beam when highlighted */}
                   {post.isHighlighted && (
-                    <div className="absolute -inset-3 -z-10 rounded-3xl bg-gradient-to-tr from-purple-600/40 via-pink-500/35 to-indigo-600/40 blur-xl pointer-events-none" />
+                    <div className="absolute -inset-[2px] rounded-[18px] overflow-hidden pointer-events-none z-0">
+                      <div className="moving-border-beam" />
+                    </div>
                   )}
 
                   <div
-                    className={`w-[390px] rounded-2xl bg-white border transition-all duration-300 overflow-hidden relative ${
+                    className={`w-[390px] rounded-2xl bg-white transition-all duration-300 overflow-hidden relative z-10 ${
                       post.isHighlighted
-                        ? 'aura-glow ring-2 ring-purple-500/80 shadow-[0_0_45px_rgba(168,85,247,0.45)]'
+                        ? 'border border-transparent shadow-[0_6px_24px_-4px_rgba(147,51,234,0.22)]'
                         : isSelected
-                          ? 'border-neutral-900 shadow-[0_16px_40px_-6px_rgba(15,23,42,0.18)] ring-1 ring-neutral-900'
-                          : 'border-neutral-200/90 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06),0_1px_3px_rgba(15,23,42,0.03)] hover:border-neutral-300 hover:shadow-[0_12px_32px_-6px_rgba(15,23,42,0.10)]'
+                          ? 'border border-neutral-900 shadow-[0_16px_40px_-6px_rgba(15,23,42,0.18)] ring-1 ring-neutral-900'
+                          : 'border border-neutral-200/90 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06),0_1px_3px_rgba(15,23,42,0.03)] hover:border-neutral-300 hover:shadow-[0_12px_32px_-6px_rgba(15,23,42,0.10)]'
                     }`}
                   >
                   {/* Node Header */}
@@ -887,7 +889,7 @@ export function CanvasWorkspace() {
                             ? 'bg-purple-50 text-purple-700 border-purple-200 shadow-2xs font-semibold'
                             : 'text-neutral-600 hover:text-black hover:bg-neutral-100 border-transparent hover:border-neutral-200'
                         }`}
-                        title={post.isHighlighted ? 'Remove Aura Glow' : 'Highlight with Aura Glow'}
+                        title={post.isHighlighted ? 'Remove Highlight' : 'Highlight with Moving Border'}
                       >
                         <Sparkles className={`w-3.5 h-3.5 ${post.isHighlighted ? 'text-purple-600' : 'text-neutral-500'}`} />
                         <span>{post.isHighlighted ? 'Highlighted' : 'Highlight'}</span>

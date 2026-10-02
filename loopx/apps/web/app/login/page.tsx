@@ -41,15 +41,12 @@ export default function LoginPage() {
       <div className="w-full max-w-md space-y-6">
         {/* Logo / Brand */}
         <div className="text-center space-y-3">
-          <div className="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-white border border-neutral-200 shadow-xs">
-            <svg
-              className="w-5 h-5 fill-black"
-              viewBox="0 0 76 65"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path d="M37.5274 0L75.0548 65H0L37.5274 0Z" />
-            </svg>
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-white border border-neutral-200/90 shadow-xs p-2">
+            <img
+              src="/loogx-logo&favicon.png"
+              alt="loopx logo"
+              className="w-full h-full object-contain"
+            />
           </div>
           <div>
             <h1 className="font-serif text-2xl font-normal tracking-tight text-neutral-950">

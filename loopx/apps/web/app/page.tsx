@@ -17,16 +17,11 @@ export default function LandingPage() {
       {/* ── Navigation Header ── */}
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-neutral-200 px-6 py-3.5 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-neutral-100 border border-neutral-200 flex items-center justify-center shadow-xs">
-            <svg
-              className="w-3.5 h-3.5 fill-black"
-              viewBox="0 0 76 65"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path d="M37.5274 0L75.0548 65H0L37.5274 0Z" />
-            </svg>
-          </div>
+          <img
+            src="/loogx-logo&favicon.png"
+            alt="loopx logo"
+            className="w-7 h-7 rounded-lg object-contain shadow-xs"
+          />
           <span className="font-semibold text-sm tracking-tight text-neutral-900">
             loopx
           </span>
@@ -204,14 +199,11 @@ export default function LandingPage() {
       {/* ── Footer ── */}
       <footer className="mt-auto border-t border-neutral-200/80 py-6 px-6 text-center text-xs font-mono text-neutral-500 flex items-center justify-between max-w-5xl mx-auto w-full">
         <div className="flex items-center gap-2">
-          <svg
-            className="w-3.5 h-3.5 fill-black"
-            viewBox="0 0 76 65"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path d="M37.5274 0L75.0548 65H0L37.5274 0Z" />
-          </svg>
+          <img
+            src="/loogx-logo&favicon.png"
+            alt="loopx logo"
+            className="w-5 h-5 rounded-md object-contain"
+          />
           <span className="text-neutral-900 font-sans font-semibold">loopx</span>
           <span className="text-[10px] text-neutral-400 font-mono">v1.0</span>
         </div>

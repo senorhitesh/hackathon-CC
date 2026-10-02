@@ -151,20 +151,31 @@ body {
   -webkit-user-select: none;
 }
 
-/* ─── Aura Glow for Highlighted Post Cards ──────────────────────────────────── */
+/* ─── Moving Border Beam for Highlighted Node Cards ───────────────────────── */
 
-.aura-glow {
-  box-shadow: 0 0 25px 4px rgba(139, 92, 246, 0.45), 0 0 55px 12px rgba(168, 85, 247, 0.3), 0 0 90px 20px rgba(236, 72, 153, 0.2) !important;
-  border-color: rgba(168, 85, 247, 0.9) !important;
-  animation: aura-glow-pulse 2.8s ease-in-out infinite alternate;
-}
-
-@keyframes aura-glow-pulse {
+@keyframes moving-border-spin {
   0% {
-    box-shadow: 0 0 20px 4px rgba(139, 92, 246, 0.4), 0 0 45px 10px rgba(168, 85, 247, 0.25), 0 0 75px 16px rgba(236, 72, 153, 0.15);
+    transform: rotate(0deg);
   }
   100% {
-    box-shadow: 0 0 35px 8px rgba(139, 92, 246, 0.65), 0 0 75px 18px rgba(168, 85, 247, 0.45), 0 0 115px 28px rgba(236, 72, 153, 0.3);
+    transform: rotate(360deg);
   }
 }
+
+.moving-border-beam {
+  position: absolute;
+  inset: -150%;
+  background: conic-gradient(
+    from 0deg at 50% 50%,
+    transparent 0deg,
+    #9333ea 35deg,
+    #ec4899 80deg,
+    #6366f1 125deg,
+    transparent 170deg,
+    transparent 360deg
+  );
+  animation: moving-border-spin 3.2s linear infinite;
+  pointer-events: none;
+}
+
 

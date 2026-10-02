@@ -19,13 +19,36 @@ import {
 } from './icons/Hugeicons';
 
 export function TopBar() {
-  const { state, dispatch, logoutUser, getShareUrl } = useAppContext();
-  const { currentUser, roomId, sessionName, rooms, collaborators, activeUsers } = state;
+  const {
+    state,
+    dispatch,
+    logoutUser,
+    getShareUrl,
+    updateUserName,
+    setUserAlias,
+    getEffectiveUserName,
+  } = useAppContext();
+  const { currentUser, roomId, sessionName, rooms, collaborators, activeUsers, customAliases } = state;
 
   const [copied, setCopied] = useState(false);
   const [boardDropdownOpen, setBoardDropdownOpen] = useState(false);
   const [sharePopoverOpen, setSharePopoverOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [collabPopoverOpen, setCollabPopoverOpen] = useState(false);
+
+  // Self name editing state
+  const [isEditingMyName, setIsEditingMyName] = useState(false);
+  const [myNameInput, setMyNameInput] = useState(currentUser.name || '');
+
+  // Collaborator alias editing state
+  const [editingCollabUid, setEditingCollabUid] = useState<string | null>(null);
+  const [collabAliasInput, setCollabAliasInput] = useState('');
+
+  React.useEffect(() => {
+    if (!isEditingMyName) {
+      setMyNameInput(currentUser.name || '');
+    }
+  }, [currentUser.name, isEditingMyName]);
 
   const activeShareUrl = getShareUrl(roomId);
 
@@ -147,21 +170,207 @@ export function TopBar() {
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
           <span>CometChat Live</span>
         </div>
-        {/* Collaborators Avatar Stack */}
-        {activeCollabList.length > 0 && (
-          <div className="hidden xl:flex items-center -space-x-1.5 mr-1" title={`${activeCollabList.length} collaborator(s) online`}>
-            {activeCollabList.slice(0, 3).map((collab) => (
+        {/* Collaborators Avatar Stack with Interactive Naming Popover */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setCollabPopoverOpen(!collabPopoverOpen)}
+            className="flex items-center gap-1.5 px-2 py-1 rounded-full hover:bg-neutral-100 transition-colors border border-transparent hover:border-neutral-200"
+            title="View & rename collaborators"
+          >
+            <div className="flex items-center -space-x-1.5">
               <div
-                key={collab.uid}
-                className="w-6 h-6 rounded-full border border-white flex items-center justify-center text-[10px] font-bold text-white shadow-xs select-none"
-                style={{ backgroundColor: collab.color || '#2563eb' }}
-                title={collab.name}
+                className="w-6 h-6 rounded-full border border-white bg-neutral-900 text-white flex items-center justify-center text-[10px] font-bold shadow-xs select-none"
+                title={`${currentUser.name} (You)`}
               >
-                {collab.name.charAt(0).toUpperCase()}
+                {(currentUser.name || 'Y').charAt(0).toUpperCase()}
               </div>
-            ))}
-          </div>
-        )}
+              {activeCollabList.slice(0, 3).map((collab) => {
+                const effName = getEffectiveUserName(collab.uid, collab.name);
+                return (
+                  <div
+                    key={collab.uid}
+                    className="w-6 h-6 rounded-full border border-white flex items-center justify-center text-[10px] font-bold text-white shadow-xs select-none"
+                    style={{ backgroundColor: collab.color || '#2563eb' }}
+                    title={effName}
+                  >
+                    {effName.charAt(0).toUpperCase()}
+                  </div>
+                );
+              })}
+            </div>
+            <span className="text-[11px] font-semibold text-neutral-700 hidden sm:inline">
+              {activeCollabList.length + 1} online
+            </span>
+          </button>
+
+          {collabPopoverOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => {
+                  setCollabPopoverOpen(false);
+                  setEditingCollabUid(null);
+                }}
+              />
+              <div className="absolute top-full right-0 mt-2 w-80 rounded-2xl bg-white border border-neutral-200 shadow-2xl p-3.5 z-50 animate-fade-in text-neutral-900">
+                <div className="flex items-center justify-between pb-2 border-b border-neutral-100 mb-2.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <h4 className="text-xs font-bold text-neutral-900">Workspace Collaborators</h4>
+                  </div>
+                  <span className="text-[10px] font-mono font-medium text-neutral-500 bg-neutral-100 px-2 py-0.5 rounded-full border border-neutral-200">
+                    {activeCollabList.length + 1} connected
+                  </span>
+                </div>
+
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {/* Current User Row */}
+                  <div className="flex items-center justify-between p-2 rounded-xl bg-neutral-50 border border-neutral-200/60">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-7 h-7 rounded-full bg-neutral-900 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                        {(currentUser.name || 'Y').charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-xs font-semibold text-neutral-900 truncate">
+                            {currentUser.name}
+                          </p>
+                          <span className="text-[9px] font-bold text-neutral-500 bg-white px-1.5 py-0.2 rounded border border-neutral-200">
+                            YOU
+                          </span>
+                        </div>
+                        <p className="text-[10px] font-mono text-neutral-400">
+                          ID: #{(currentUser.uid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '').slice(-4).toUpperCase()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Active Collaborators */}
+                  {activeCollabList.length === 0 ? (
+                    <div className="p-3 text-center rounded-xl bg-neutral-50 border border-dashed border-neutral-200 text-neutral-500">
+                      <p className="text-xs font-medium">No other collaborators yet</p>
+                      <p className="text-[10px] text-neutral-400 mt-0.5">
+                        Share link to invite teammates to edit together!
+                      </p>
+                    </div>
+                  ) : (
+                    activeCollabList.map((collab) => {
+                      const effName = getEffectiveUserName(collab.uid, collab.name);
+                      const shortId = (collab.uid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '').slice(-4).toUpperCase();
+                      const hasAlias = Boolean(customAliases && customAliases[collab.uid]);
+                      const isEditingThis = editingCollabUid === collab.uid;
+
+                      return (
+                        <div
+                          key={collab.uid}
+                          className="p-2 rounded-xl bg-white border border-neutral-200/80 hover:border-neutral-300 transition-colors shadow-2xs space-y-2"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div
+                                className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-xs"
+                                style={{ backgroundColor: collab.color || '#2563eb' }}
+                              >
+                                {effName.charAt(0).toUpperCase()}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-neutral-900 truncate">
+                                  {effName}
+                                </p>
+                                <div className="flex items-center gap-1.5 text-[10px] text-neutral-400 font-mono">
+                                  <span>ID: #{shortId}</span>
+                                  {hasAlias && (
+                                    <span className="text-[9px] text-indigo-600 bg-indigo-50 px-1 rounded font-sans font-medium">
+                                      Custom Name
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {!isEditingThis && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingCollabUid(collab.uid);
+                                  setCollabAliasInput(customAliases?.[collab.uid] || effName);
+                                }}
+                                className="px-2 py-1 rounded-lg text-[11px] font-semibold text-neutral-700 bg-neutral-100 hover:bg-neutral-200 transition-colors shrink-0 flex items-center gap-1"
+                              >
+                                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                                </svg>
+                                <span>{hasAlias ? 'Rename' : 'Give Name'}</span>
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Inline Edit Form for this collaborator */}
+                          {isEditingThis && (
+                            <div className="pt-2 border-t border-neutral-100 flex flex-col gap-1.5 animate-fade-in">
+                              <label className="text-[10px] font-semibold text-neutral-600 uppercase tracking-wider">
+                                Give name to #{shortId}:
+                              </label>
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="text"
+                                  autoFocus
+                                  value={collabAliasInput}
+                                  onChange={(e) => setCollabAliasInput(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      setUserAlias(collab.uid, collabAliasInput);
+                                      setEditingCollabUid(null);
+                                    } else if (e.key === 'Escape') {
+                                      setEditingCollabUid(null);
+                                    }
+                                  }}
+                                  placeholder="e.g. Alex (Brand Lead)"
+                                  className="flex-1 px-2 py-1 rounded-lg text-xs bg-neutral-50 border border-neutral-300 focus:outline-none focus:ring-1 focus:ring-neutral-900"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setUserAlias(collab.uid, collabAliasInput);
+                                    setEditingCollabUid(null);
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-neutral-900 text-white text-xs font-semibold hover:bg-neutral-800 transition-colors"
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingCollabUid(null)}
+                                  className="px-2 py-1 rounded-lg bg-neutral-100 text-neutral-600 text-xs font-medium hover:bg-neutral-200 transition-colors"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                              {hasAlias && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setUserAlias(collab.uid, '');
+                                    setEditingCollabUid(null);
+                                  }}
+                                  className="text-[10px] text-rose-500 hover:underline text-left"
+                                >
+                                  Reset to original ID handle
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
 
         {/* ── Share Button & Popover ── */}
         <div className="relative">
@@ -274,19 +483,97 @@ export function TopBar() {
           </button>
 
           {userMenuOpen && (
-            <div className="absolute top-full right-0 mt-2 w-56 rounded-2xl bg-white border border-neutral-200 shadow-2xl p-2 z-50 animate-fade-in text-neutral-900">
-              <div className="px-2.5 py-2 border-b border-neutral-100">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-neutral-900 truncate">
-                    {currentUser.name}
-                  </p>
-                  <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-neutral-100 text-neutral-600 border border-neutral-200">
-                    {currentUser.isLoggedIn ? 'Member' : 'Guest'}
-                  </span>
-                </div>
-                <p className="text-[11px] text-neutral-400 font-mono truncate mt-0.5">
-                  {currentUser.email || `ID: #${(currentUser.uid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '').slice(-4).toUpperCase()}`}
-                </p>
+            <div className="absolute top-full right-0 mt-2 w-64 rounded-2xl bg-white border border-neutral-200 shadow-2xl p-2.5 z-50 animate-fade-in text-neutral-900">
+              <div className="px-2 py-2 border-b border-neutral-100">
+                {!isEditingMyName ? (
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-bold text-neutral-900 truncate">
+                        {currentUser.name}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMyNameInput(currentUser.name || '');
+                          setIsEditingMyName(true);
+                        }}
+                        className="text-[10px] font-semibold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1"
+                      >
+                        <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                        </svg>
+                        <span>Edit Name</span>
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-neutral-100 text-neutral-600 border border-neutral-200">
+                        {currentUser.isLoggedIn ? 'Member' : 'Guest'}
+                      </span>
+                      <p className="text-[10px] text-neutral-400 font-mono truncate">
+                        ID: #{(currentUser.uid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '').slice(-4).toUpperCase()}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2 animate-fade-in">
+                    <label className="text-[10px] font-semibold text-neutral-700 uppercase tracking-wider block">
+                      Your Display Name
+                    </label>
+                    <input
+                      type="text"
+                      autoFocus
+                      value={myNameInput}
+                      onChange={(e) => setMyNameInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          updateUserName(myNameInput);
+                          setIsEditingMyName(false);
+                        } else if (e.key === 'Escape') {
+                          setIsEditingMyName(false);
+                        }
+                      }}
+                      placeholder="e.g. Sarah · Art Director"
+                      className="w-full px-2.5 py-1.5 rounded-lg text-xs bg-neutral-50 border border-neutral-300 focus:outline-none focus:ring-1 focus:ring-neutral-900"
+                    />
+
+                    {/* Quick Role Presets */}
+                    <div className="flex flex-wrap gap-1">
+                      {['🎨 Designer', '✍️ Copywriter', '👑 Lead', '💼 Client'].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => {
+                            const base = myNameInput.split('·')[0]?.trim() || currentUser.name.split('·')[0]?.trim() || 'User';
+                            setMyNameInput(`${base} · ${preset}`);
+                          }}
+                          className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-neutral-100 hover:bg-neutral-200 text-neutral-700 border border-neutral-200 transition-colors"
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center gap-1.5 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateUserName(myNameInput);
+                          setIsEditingMyName(false);
+                        }}
+                        className="flex-1 py-1 rounded-lg bg-neutral-900 text-white text-xs font-semibold hover:bg-neutral-800 transition-colors"
+                      >
+                        Save Name
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingMyName(false)}
+                        className="px-2.5 py-1 rounded-lg bg-neutral-100 text-neutral-600 text-xs font-medium hover:bg-neutral-200 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="py-1">

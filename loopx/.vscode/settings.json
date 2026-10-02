@@ -1,0 +1,9 @@
+{
+  "cometchat.connector.enabled": true,
+  "cometchat.connector.url": "https://mcp.cometchat.com/mcp?ref=z2c",
+  "mcp.servers": {
+    "cometchat": {
+      "url": "https://mcp.cometchat.com/mcp?ref=z2c"
+    }
+  }
+}

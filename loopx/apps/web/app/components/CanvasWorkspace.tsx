@@ -48,7 +48,7 @@ export function CanvasWorkspace() {
   } = useAppContext();
   const { sendMessage } = useCometChatContext();
 
-  const { posts, activePostId, currentUser, collaborators, chatMessages } = state;
+  const { posts, activePostId, currentUser, collaborators, chatMessages, customAliases } = state;
 
   // Viewport Pan & Zoom State (Canvas zoom, NOT the page)
   const [zoom, setZoom] = useState(100);
@@ -727,9 +727,10 @@ export function CanvasWorkspace() {
                 className="px-1.5 py-0.5 rounded text-[10px] font-semibold text-white whitespace-nowrap shadow-md tracking-tight font-sans border border-black/10"
                 style={{ backgroundColor: collab.color || '#2563eb' }}
               >
-                {(collab.name && collab.name !== 'Collaborator' && collab.name !== 'owner')
-                  ? collab.name
-                  : `User #${(collab.uid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '').slice(-4).toUpperCase() || '7A2B'}`}
+                {customAliases?.[collab.uid] ||
+                  ((collab.name && collab.name !== 'Collaborator' && collab.name !== 'owner' && collab.name !== 'client')
+                    ? collab.name
+                    : `User #${(collab.uid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '').slice(-4).toUpperCase() || '7A2B'}`)}
               </span>
             </div>
           );

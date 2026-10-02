@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "cometchat": {
+      "command": "npx",
+      "args": ["-y", "@cometchat/skills", "serve"],
+      "url": "https://mcp.cometchat.com/mcp?ref=z2c",
+      "transport": "http"
+    }
+  }
+}

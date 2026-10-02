@@ -23,9 +23,17 @@ import {
 import type { BoardPost } from '@repo/types';
 
 export function PostChatPanel() {
-  const { state, dispatch, togglePostHighlight, clearChatMessages } = useAppContext();
+  const {
+    state,
+    dispatch,
+    togglePostHighlight,
+    clearChatMessages,
+    updateUserName,
+    setUserAlias,
+    getEffectiveUserName,
+  } = useAppContext();
   const { sendMessage } = useCometChatContext();
-  const { posts, activePostId, annotations, currentUser, chatMessages, collaborators } = state;
+  const { posts, activePostId, annotations, currentUser, chatMessages, collaborators, customAliases } = state;
   const [inputText, setInputText] = useState('');
   const [isMinimized, setIsMinimized] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -37,6 +45,12 @@ export function PostChatPanel() {
   } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Name editing states
+  const [isEditingMyName, setIsEditingMyName] = useState(false);
+  const [myNameInput, setMyNameInput] = useState('');
+  const [renamingUid, setRenamingUid] = useState<string | null>(null);
+  const [renamingInput, setRenamingInput] = useState('');
 
   const currentPostId = activePostId || (posts.length > 0 ? posts[0]?.id : null);
   const activePost = posts.find((p) => p.id === currentPostId);
@@ -182,10 +196,77 @@ export function PostChatPanel() {
               Creative Thread
             </span>
           </div>
-          <h2 className="text-sm font-semibold text-neutral-900">
-            Hi, {myDisplayName} 👋
-          </h2>
-          <p className="text-xs text-neutral-500 mt-0.5 leading-relaxed">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-neutral-900">
+              Hi, {myDisplayName} 👋
+            </h2>
+            <button
+              type="button"
+              onClick={() => {
+                setMyNameInput(myDisplayName);
+                setIsEditingMyName(!isEditingMyName);
+              }}
+              className="text-[10px] font-semibold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1"
+            >
+              <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+              </svg>
+              <span>{isEditingMyName ? 'Close' : 'Edit Name'}</span>
+            </button>
+          </div>
+
+          {isEditingMyName && (
+            <div className="mt-2 p-2.5 rounded-xl bg-white border border-blue-200 shadow-2xs space-y-1.5 animate-fade-in">
+              <label className="text-[10px] font-semibold text-neutral-700 uppercase tracking-wider block">
+                Your Display Name:
+              </label>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  autoFocus
+                  value={myNameInput}
+                  onChange={(e) => setMyNameInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      updateUserName(myNameInput);
+                      setIsEditingMyName(false);
+                    } else if (e.key === 'Escape') {
+                      setIsEditingMyName(false);
+                    }
+                  }}
+                  placeholder="e.g. Sarah · Art Director"
+                  className="flex-1 px-2.5 py-1 rounded-lg text-xs bg-neutral-50 border border-neutral-300 focus:outline-none focus:ring-1 focus:ring-neutral-900"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateUserName(myNameInput);
+                    setIsEditingMyName(false);
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-neutral-900 text-white text-xs font-semibold hover:bg-neutral-800 transition-colors"
+                >
+                  Save
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1 pt-0.5">
+                {['🎨 Designer', '✍️ Copywriter', '👑 Lead', '💼 Client'].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => {
+                      const base = myNameInput.split('·')[0]?.trim() || myDisplayName.split('·')[0]?.trim() || 'User';
+                      setMyNameInput(`${base} · ${preset}`);
+                    }}
+                    className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200/60 transition-colors"
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <p className="text-xs text-neutral-500 mt-1 leading-relaxed">
             Collaborate with your partner on ad copy, visual assets, and approvals in real-time.
           </p>
 
@@ -276,11 +357,10 @@ export function PostChatPanel() {
             postMessages.map((msg) => {
               const isMe = msg.senderUid === currentUser.uid;
               const shortId = (msg.senderUid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '').slice(-4).toUpperCase() || '7F2A';
-              const displayName = isMe
-                ? 'You'
-                : (msg.senderName && msg.senderName !== 'Collaborator' && msg.senderName !== 'owner' && msg.senderName !== 'client')
-                  ? msg.senderName
-                  : `User #${shortId}`;
+              const effName = getEffectiveUserName(msg.senderUid, msg.senderName);
+              const displayName = isMe ? 'You' : effName;
+              const isRenaming = renamingUid === msg.senderUid;
+              const hasAlias = Boolean(customAliases && customAliases[msg.senderUid]);
 
               return (
                 <div
@@ -294,8 +374,59 @@ export function PostChatPanel() {
                     <span className="text-[9px] px-1.5 py-0.2 rounded bg-neutral-100 text-neutral-600 font-mono border border-neutral-200/60">
                       ID: #{shortId}
                     </span>
+                    {!isMe && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRenamingUid(isRenaming ? null : msg.senderUid);
+                          setRenamingInput(customAliases?.[msg.senderUid] || effName);
+                        }}
+                        className="text-[9px] text-neutral-500 hover:text-neutral-900 underline ml-0.5"
+                        title="Give a custom name to this user"
+                      >
+                        {hasAlias ? 'Rename' : 'Give Name'}
+                      </button>
+                    )}
                     <span>• {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
+
+                  {isRenaming && (
+                    <div className="flex items-center gap-1.5 p-1 rounded-lg bg-neutral-100 border border-neutral-300 shadow-2xs mb-1 animate-fade-in">
+                      <input
+                        type="text"
+                        autoFocus
+                        value={renamingInput}
+                        onChange={(e) => setRenamingInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            setUserAlias(msg.senderUid, renamingInput);
+                            setRenamingUid(null);
+                          } else if (e.key === 'Escape') {
+                            setRenamingUid(null);
+                          }
+                        }}
+                        placeholder={`Name for #${shortId}`}
+                        className="px-2 py-0.5 rounded text-[11px] bg-white border border-neutral-300 focus:outline-none focus:ring-1 focus:ring-neutral-900"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserAlias(msg.senderUid, renamingInput);
+                          setRenamingUid(null);
+                        }}
+                        className="px-2 py-0.5 rounded bg-neutral-900 text-white text-[10px] font-semibold hover:bg-neutral-800"
+                      >
+                        Save
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRenamingUid(null)}
+                        className="px-1 text-[10px] text-neutral-500 hover:text-neutral-800"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
 
                   <div
                     className={`max-w-[88%] px-3.5 py-2.5 rounded-2xl text-xs leading-relaxed shadow-xs ${

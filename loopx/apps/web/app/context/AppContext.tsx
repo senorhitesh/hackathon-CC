@@ -61,6 +61,7 @@ export interface AppState extends AdProofSession {
   selectedPinId: string | null;
   collaborators: Record<string, CollaboratorCursor>;
   chatMessages: ChatMessage[];
+  customAliases: Record<string, string>;
   // Modals state
   isLoginOpen: boolean;
   isCreateRoomOpen: boolean;
@@ -70,6 +71,9 @@ export interface AppState extends AdProofSession {
 
 type Action =
   | { type: 'SET_USER'; user: ActiveUser & { role: UserRole; email?: string; isLoggedIn?: boolean } }
+  | { type: 'SET_USER_NAME'; name: string }
+  | { type: 'SET_USER_ALIAS'; uid: string; alias: string }
+  | { type: 'SET_USER_ALIASES'; aliases: Record<string, string> }
   | { type: 'SET_ROOM_ID'; roomId: string; sessionName?: string }
   | { type: 'SET_ROOMS'; rooms: BoardRoom[] }
   | { type: 'ADD_ROOM'; room: BoardRoom }
@@ -189,6 +193,7 @@ const initialState: AppState = {
   selectedElementId: null,
   pinModeActive: false,
   chatMessages: [],
+  customAliases: {},
   isLoginOpen: false,
   isCreateRoomOpen: false,
   isCreatePostOpen: false,
@@ -199,6 +204,30 @@ function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'SET_USER':
       return { ...state, currentUser: action.user };
+
+    case 'SET_USER_NAME':
+      return {
+        ...state,
+        currentUser: { ...state.currentUser, name: action.name },
+        activeUsers: state.activeUsers.map((u) =>
+          u.uid === state.currentUser.uid ? { ...u, name: action.name } : u
+        ),
+      };
+
+    case 'SET_USER_ALIAS':
+      return {
+        ...state,
+        customAliases: {
+          ...state.customAliases,
+          [action.uid]: action.alias,
+        },
+      };
+
+    case 'SET_USER_ALIASES':
+      return {
+        ...state,
+        customAliases: action.aliases,
+      };
 
     case 'SET_ROOM_ID': {
       const existingRoom = state.rooms.find((r) => r.id === action.roomId);
@@ -352,7 +381,7 @@ function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         activeUsers: state.activeUsers.some((u) => u.uid === action.user.uid)
-          ? state.activeUsers
+          ? state.activeUsers.map((u) => (u.uid === action.user.uid ? { ...u, ...action.user } : u))
           : [...state.activeUsers, action.user],
       };
 
@@ -460,6 +489,9 @@ interface AppContextValue {
   getShareUrl: (roomId?: string) => string;
   sendRealtimeChatMessage: (postId: string, text: string) => ChatMessage | void;
   clearChatMessages: (postId?: string) => void;
+  updateUserName: (name: string) => void;
+  setUserAlias: (uid: string, alias: string) => void;
+  getEffectiveUserName: (uid?: string, rawName?: string) => string;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -521,6 +553,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     sessionStorage.setItem('loopx_tab_user', JSON.stringify(finalUser));
     dispatch({ type: 'SET_USER', user: finalUser });
+
+    const savedAliases = localStorage.getItem('loopx_user_aliases');
+    if (savedAliases) {
+      try {
+        dispatch({ type: 'SET_USER_ALIASES', aliases: JSON.parse(savedAliases) });
+      } catch (_) {}
+    }
 
     if (urlRoom) {
       dispatch({ type: 'SET_ROOM_ID', roomId: urlRoom });
@@ -698,6 +737,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } else if (payload.type === 'presence_ack') {
         if (payload.user?.uid === state.currentUser.uid) return;
         dispatch({ type: 'USER_JOINED', user: payload.user });
+      } else if (payload.type === 'user_name_changed') {
+        if (payload.uid === state.currentUser.uid) return;
+        dispatch({
+          type: 'USER_JOINED',
+          user: {
+            uid: payload.uid,
+            name: payload.name,
+            status: 'ONLINE',
+          },
+        });
+        dispatch({
+          type: 'UPDATE_COLLABORATOR_CURSOR',
+          cursor: {
+            uid: payload.uid,
+            role: state.collaborators[payload.uid]?.role || 'client',
+            color: state.collaborators[payload.uid]?.color || getRandomColor(payload.uid || 'usr') || '#2563eb',
+            x: state.collaborators[payload.uid]?.x ?? 0,
+            y: state.collaborators[payload.uid]?.y ?? 0,
+            lastSeen: Date.now(),
+            name: payload.name || 'Collaborator',
+          },
+        });
       } else if (payload.type === 'presence_leave') {
         if (payload.uid === state.currentUser.uid) return;
         dispatch({ type: 'USER_LEFT', uid: payload.uid });
@@ -792,6 +853,62 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } catch (_) {}
     }
   }, [state.currentUser.uid, state.currentUser.name, state.currentUser.role]);
+
+  // Update own user display name and broadcast across tabs/collaborators
+  const updateUserName = useCallback(
+    (name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      dispatch({ type: 'SET_USER_NAME', name: trimmed });
+      const updatedUser = { ...state.currentUser, name: trimmed };
+      if (typeof window !== 'undefined') {
+        try {
+          sessionStorage.setItem('loopx_tab_user', JSON.stringify(updatedUser));
+          localStorage.setItem('loopx_user_session', JSON.stringify(updatedUser));
+        } catch (_) {}
+      }
+      if (channelRef.current) {
+        try {
+          channelRef.current.postMessage({
+            type: 'user_name_changed',
+            uid: state.currentUser.uid,
+            name: trimmed,
+          });
+        } catch (_) {}
+      }
+    },
+    [state.currentUser],
+  );
+
+  // Give a custom alias/name to a particular collaborator UID
+  const setUserAlias = useCallback((uid: string, alias: string) => {
+    const trimmed = alias.trim();
+    dispatch({ type: 'SET_USER_ALIAS', uid, alias: trimmed });
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('loopx_user_aliases');
+        const map = raw ? JSON.parse(raw) : {};
+        if (trimmed) {
+          map[uid] = trimmed;
+        } else {
+          delete map[uid];
+        }
+        localStorage.setItem('loopx_user_aliases', JSON.stringify(map));
+      } catch (_) {}
+    }
+  }, []);
+
+  // Compute effective display name checking custom alias first, then custom name, then fallback
+  const getEffectiveUserName = useCallback(
+    (targetUid?: string, rawName?: string) => {
+      if (!targetUid) return rawName || 'User';
+      if (state.customAliases && state.customAliases[targetUid]) {
+        return state.customAliases[targetUid];
+      }
+      return formatUserDisplayName(rawName, targetUid);
+    },
+    [state.customAliases],
+  );
 
   const loginUser = useCallback((name: string, role: UserRole, email?: string) => {
     const user: ActiveUser & { role: UserRole; email?: string; isLoggedIn?: boolean } = {
@@ -1104,6 +1221,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         getShareUrl,
         sendRealtimeChatMessage,
         clearChatMessages,
+        updateUserName,
+        setUserAlias,
+        getEffectiveUserName,
       }}
     >
       {children}

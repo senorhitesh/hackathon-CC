@@ -287,15 +287,18 @@ export function LeftSidebar() {
                 >
                   {(currentUser?.name || 'Y').charAt(0).toUpperCase()}
                 </div>
-                {otherUsers.slice(0, 3).map((u) => (
-                  <div
-                    key={u.uid}
-                    className={`w-5 h-5 rounded-full border border-white ${getAvatarColor(u.name)} text-white text-[9px] font-bold flex items-center justify-center shadow-xs`}
-                    title={u.name}
-                  >
-                    {(u.name || 'C').charAt(0).toUpperCase()}
-                  </div>
-                ))}
+                {otherUsers.slice(0, 3).map((u) => {
+                  const effName = state.customAliases?.[u.uid] || u.name;
+                  return (
+                    <div
+                      key={u.uid}
+                      className={`w-5 h-5 rounded-full border border-white ${getAvatarColor(effName)} text-white text-[9px] font-bold flex items-center justify-center shadow-xs`}
+                      title={effName}
+                    >
+                      {(effName || 'C').charAt(0).toUpperCase()}
+                    </div>
+                  );
+                })}
               </div>
               <span className="text-[11px] text-neutral-600 font-medium">
                 {totalOtherCount > 0

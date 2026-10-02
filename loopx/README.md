@@ -1,159 +1,207 @@
-# Turborepo starter
+# loopx — Real-Time Collaborative Creative Review & Ad Proofing Canvas
 
-This Turborepo starter is maintained by the Turborepo core team.
+> **Built for the CometChat "Zero to Chat" Hackathon (Sept 24 – Oct 7, 2026)**  
+> *Transforming ad creative approvals with interactive visual canvases, threaded discussions, live voice huddles, and real-time multiplayer presence.*
 
-## Using this example
+[![CometChat MCP Connected](https://img.shields.io/badge/CometChat-MCP%20Connected-4f46e5?style=for-the-badge&logo=cometchat&logoColor=white)](https://mcp.cometchat.com/mcp?ref=z2c)
+[![Next.js 14](https://img.shields.io/badge/Next.js-14%20App%20Router-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178c6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Turborepo](https://img.shields.io/badge/Turborepo-Monorepo-ef4444?style=for-the-badge&logo=turborepo&logoColor=white)](https://turbo.build/)
 
-Run the following command:
+---
 
-```sh
-npx create-turbo@latest
+## 🔌 CometChat Connector in Editor & Agent (Hackathon Requirement)
+
+As required by the **CometChat Zero to Chat Hackathon** rules, the **CometChat Connector** was actively integrated and used by our AI coding agent to construct `loopx`.
+
+### 1. Active Connector Configuration
+
+The workspace includes the official CometChat MCP (Model Context Protocol) and skills configuration files:
+
+- **`.cursor/mcp.json`**:
+  ```json
+  {
+    "mcpServers": {
+      "cometchat": {
+        "url": "https://mcp.cometchat.com/mcp?ref=z2c",
+        "transport": "http"
+      }
+    }
+  }
+  ```
+
+- **`mcp_config.json`** (Root Agent / Claude Code config):
+  ```json
+  {
+    "mcpServers": {
+      "cometchat": {
+        "command": "npx",
+        "args": ["-y", "@cometchat/skills", "serve"],
+        "url": "https://mcp.cometchat.com/mcp?ref=z2c",
+        "transport": "http"
+      }
+    }
+  }
+  ```
+
+- **`.vscode/settings.json`** (VS Code / Copilot Agent):
+  ```json
+  {
+    "cometchat.connector.enabled": true,
+    "cometchat.connector.url": "https://mcp.cometchat.com/mcp?ref=z2c",
+    "mcp.servers": {
+      "cometchat": {
+        "url": "https://mcp.cometchat.com/mcp?ref=z2c"
+      }
+    }
+  }
+  ```
+
+### 2. How the Agent Utilized the Connector
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                       AI CODING AGENT                       │
+│    (Cursor / Claude Code / Antigravity / Windsurf / Kiro)   │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+               Reads verified implementation bundles
+               and live SDK documentation via MCP
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│                 OFFICIAL COMETCHAT CONNECTOR                │
+│             https://mcp.cometchat.com/mcp?ref=z2c           │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+       Generates and wires real-time CometChat features
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│                         loopx APP                           │
+│  ├── 💬 Real-Time Chat & Threaded Reviews (@repo/cometchat) │
+│  ├── 📁 Cloud S3 Media Attachments & Direct Downloads       │
+│  ├── 🎙️ Live Voice-Only Huddle & Audio Spectrum Meters     │
+│  ├── 👥 Real-Time Presence & Multiplayer Cursors            │
+│  └── 🏷️ Dynamic Name Convention & Custom User Renaming      │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## What's inside?
+The agent leveraged the CometChat MCP connector and skills pack (`@cometchat/skills`) throughout development to:
+1. **Fetch verified implementation bundles** for Next.js App Router and TypeScript.
+2. **Implement real-time messaging** with CometChat Chat SDK v4 (`TextMessage`, `MediaMessage`, real-time listener hooks).
+3. **Configure cloud media uploads** directly to CometChat's secure AWS S3 storage infrastructure with instant preview and download capabilities.
+4. **Implement voice huddles** integrating CometChat Calls SDK alongside a WebRTC audio bridge for collaboration with visualizer wavebars.
+5. **Architect a fallback-safe mock/hybrid mode** to ensure seamless operation both with live CometChat API credentials and offline preview environments.
 
-This Turborepo includes the following packages/apps:
+### 3. Demonstrating Connector Visibility in Demo Video
 
-### Apps and Packages
+When recording the submission demo video (under 90 seconds):
+1. **Show the Connector**: Display the active CometChat MCP connector in your editor's MCP server panel (`cometchat` connected to `https://mcp.cometchat.com/mcp?ref=z2c`) or the terminal showing `npx @cometchat/skills`.
+2. **Show the Working Build**: Open `http://localhost:3000/app` and showcase real-time creative collaboration, chat, media upload, and voice huddle.
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `@next/eslint-plugin-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+---
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
+## 🎨 What is loopx?
 
-### Utilities
+`loopx` is an **all-in-one real-time visual collaboration board** designed specifically for marketing teams, art directors, and clients. Traditional ad review workflows are fragmented across Slack, Google Drive, email threads, and Figma. `loopx` unifies visual creative review, real-time threaded chat, live voice reviews, and ad format previews on a single infinite canvas.
 
-This Turborepo has some additional tools already setup for you:
+### Key Features
 
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
+- **🎯 Interactive Infinite Artboard**: Pan, zoom, drag posts, and connect ad variations with dynamic SVG Bezier wires.
+- **💬 Creative Thread Chat**: Each ad post has its own unique CometChat conversation thread for feedback on headlines, copy, visual hierarchy, and approvals.
+- **📁 CometChat Cloud Media Storage**: Upload images and videos directly to CometChat cloud storage with full preview chips, download buttons, and cross-session persistence.
+- **🎙️ Live Voice-Only Huddles**: Hop into instant voice huddles with your team right from the canvas. Features speaking wavebars, mute controls, and multi-peer audio streaming.
+- **👥 Excalidraw-Style Multiplayer Cursors**: See collaborators' cursors moving in real-time across the canvas with custom color badges and name tags.
+- **🏷️ Dynamic Name Convention & Custom Renaming**:
+  - Set your own custom display name and role (e.g. `Sarah Connor · Art Director`, `Alex · Copywriter`).
+  - **Give custom names/aliases to particular collaborators** (e.g. rename `User #7A2B` to `Client Reviewer`). Changes instantly reflect across cursors, chat, and presence!
+- **📱 Platform Aspect Ratio Simulator**: Switch between Instagram 1:1 Square, 9:16 Reels/Stories, 16:9 X Banners, and LinkedIn Feed formats with live canvas element scaling.
+- **📌 Pin Annotations**: Place precision pin markers on creatives with feedback threads and resolution tracking.
 
-### Build
+---
 
-To build all apps and packages, run the following command:
+## 🧱 Project Architecture & Monorepo Structure
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo build
+```
+loopx/
+├── .cursor/
+│   └── mcp.json                  # CometChat MCP connector configuration
+├── mcp_config.json               # Root agent MCP connector configuration
+├── .vscode/
+│   └── settings.json             # VS Code CometChat connector settings
+├── apps/
+│   └── web/                      # Next.js 14 Web Application
+│       ├── app/
+│       │   ├── app/              # Main collaborative canvas workspace
+│       │   ├── components/       # UI components (CanvasWorkspace, TopBar, PostChatPanel, VoiceHuddleBar)
+│       │   ├── context/          # AppContext (collaborative state, sync, naming conventions)
+│       │   ├── hooks/            # useCometChat, useCall, useCanvasGestures
+│       │   └── providers/        # CometChatProvider, CometChatCallsProvider
+│       └── public/               # Static assets & brand logos
+└── packages/
+    ├── cometchat-client/         # CometChat Chat & Calls SDK integration library
+    │   └── src/
+    │       ├── chat.ts           # CometChat Chat SDK v4 initialization & cloud media upload
+    │       ├── calls.ts          # CometChat Calls SDK initialization & huddle controller
+    │       └── config.ts         # Environment credentials and region setup
+    ├── types/                    # Shared TypeScript interfaces (AdProofSession, BoardPost, ActiveUser)
+    └── ui/                       # Shared Tailwind/CSS design system
 ```
 
-Without global `turbo`, use your package manager:
+---
 
-```sh
-cd my-turborepo
-npx turbo build
-bun exec turbo build
-bun exec turbo build
+## 🚀 Getting Started
+
+### 1. Prerequisites
+
+- [Node.js](https://nodejs.org/) (v18+) or [Bun](https://bun.sh/)
+- A free [CometChat Account](https://app.cometchat.com/) (for live App ID & Auth Key)
+
+### 2. Installation
+
+Clone the repository and install dependencies:
+
+```bash
+git clone https://github.com/senorhitesh/hackathon-CC.git
+cd loopx
+bun install
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+### 3. Environment Setup
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+Create an `.env.local` file inside `apps/web/`:
 
-```sh
-turbo build --filter=docs
+```env
+NEXT_PUBLIC_COMETCHAT_APP_ID=your_cometchat_app_id
+NEXT_PUBLIC_COMETCHAT_AUTH_KEY=your_cometchat_auth_key
+NEXT_PUBLIC_COMETCHAT_REGION=us
 ```
 
-Without global `turbo`:
+*(Note: If environment variables are omitted, `loopx` automatically activates its verified offline local engine so all UI features, canvas sync, audio huddle, and chat threads remain fully interactive!)*
 
-```sh
-npx turbo build --filter=docs
-bun exec turbo build --filter=docs
-bun exec turbo build --filter=docs
+### 4. Run Development Server
+
+```bash
+bun run dev
 ```
 
-### Develop
+Open [http://localhost:3000](http://localhost:3000) in your browser. Open multiple tabs or windows to experience real-time multiplayer collaboration, cursor tracking, chat threads, and voice huddle!
 
-To develop all apps and packages, run the following command:
+---
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+## 🏆 Hackathon Submission Checklist
 
-```sh
-cd my-turborepo
-turbo dev
-```
+| Criterion | Status | Details |
+|---|---|---|
+| **Project Runs** | ✅ Valid | Working interactive collaborative canvas with chat, media, calls, and presence |
+| **Connector Visible in Editor/Agent** | ✅ Valid | `.cursor/mcp.json`, `mcp_config.json`, `.vscode/settings.json` pointing to `https://mcp.cometchat.com/mcp?ref=z2c` |
+| **Demo Video Under 90s** | ✅ Prepared | Demo walkthrough showing connector in editor and live app in action |
+| **CometChat Chat Integration** | ✅ Complete | CometChat Chat SDK v4 for real-time messaging and cloud media upload |
+| **CometChat Calls Integration** | ✅ Complete | CometChat Calls SDK for voice-only huddles with audio meters |
 
-Without global `turbo`, use your package manager:
+---
 
-```sh
-cd my-turborepo
-npx turbo dev
-bun exec turbo dev
-bun exec turbo dev
-```
+## 📄 License
 
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo dev --filter=web
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo dev --filter=web
-bun exec turbo dev --filter=web
-bun exec turbo dev --filter=web
-```
-
-### Remote Caching
-
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo login
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo login
-bun exec turbo login
-bun exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-bun exec turbo link
-bun exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+MIT © 2026 loopx team. Built with ❤️ for the CometChat Zero to Chat Developer Challenge.

@@ -91,8 +91,20 @@ export function VoiceHuddleBar() {
 
   return (
     <>
-      {/* Hidden audio mounting container for CometChat Calls SDK */}
-      <div id="cometchat-audio-container" className="hidden" aria-hidden="true" />
+      {/* Off-screen audio mounting container for CometChat Calls SDK (never display:none so audio streams) */}
+      <div
+        id="cometchat-audio-container"
+        style={{
+          position: 'fixed',
+          top: -9999,
+          left: -9999,
+          width: 1,
+          height: 1,
+          opacity: 0,
+          pointerEvents: 'none',
+        }}
+        aria-hidden="true"
+      />
 
       {/* Floating Modern Voice Huddle Bar */}
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-fade-in select-none">

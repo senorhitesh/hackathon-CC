@@ -8,6 +8,7 @@ import { PostChatPanel } from '../components/PostChatPanel';
 import { LoginModal } from '../components/LoginModal';
 import { CreateRoomModal } from '../components/CreateRoomModal';
 import { CreatePostModal } from '../components/CreatePostModal';
+import { VoiceHuddleBar } from '../components/VoiceHuddleBar';
 import { useCometChat } from '../hooks/useCometChat';
 
 // ─── CometChat Context (exposes sendMessage to child components) ────────────
@@ -51,6 +52,9 @@ function WorkspaceInner() {
 
           {/* Floating Real-time Peer-to-Peer Chat Panel (Image 1 Style) */}
           <PostChatPanel />
+
+          {/* Floating Live Voice Huddle Bar (Voice Only) */}
+          <VoiceHuddleBar />
         </div>
 
         {/* ── Interactive Modals ── */}

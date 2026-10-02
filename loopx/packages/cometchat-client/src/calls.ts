@@ -15,11 +15,17 @@ import { isMockMode } from './chat';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let CometChatCalls: any = null;
 
-async function getCallsSDK() {
+export async function getCallsSDK() {
   if (CometChatCalls) return CometChatCalls;
   const mod = await import('@cometchat/calls-sdk-javascript');
   CometChatCalls = mod.CometChatCalls;
   return CometChatCalls;
+}
+
+export async function generateCallToken(sessionId: string): Promise<string> {
+  const sdk = await getCallsSDK();
+  const tokenResult = await sdk.generateToken(sessionId);
+  return tokenResult.token;
 }
 
 let _callsInitialized = false;
@@ -49,19 +55,19 @@ export async function initCometChatCalls(): Promise<boolean> {
   }
 }
 
-// ─── Start / Join Voice Huddle ─────────────────────────────────────────────────
+// ─── Start / Join Voice Huddle (Audio Only) ───────────────────────────────────
 
 export interface HuddleOptions {
   sessionId: string;
   isVideo?: boolean;
-  container: HTMLElement;
+  container?: HTMLElement | null;
   onParticipantJoined?: (participant: HuddleParticipant) => void;
   onParticipantLeft?: (uid: string) => void;
   onHuddleEnded?: () => void;
 }
 
 export async function startHuddle(options: HuddleOptions): Promise<void> {
-  const { sessionId, isVideo = false, container, onParticipantJoined, onParticipantLeft, onHuddleEnded } = options;
+  const { sessionId, container, onParticipantJoined, onParticipantLeft, onHuddleEnded } = options;
 
   if (isMockMode()) {
     const currentUser = getMockCurrentUser();
@@ -70,14 +76,14 @@ export async function startHuddle(options: HuddleOptions): Promise<void> {
       name: currentUser.name,
       avatar: currentUser.avatar,
       isMuted: false,
-      isVideoOff: !isVideo,
+      isVideoOff: true,
       isSpeaking: false,
     };
     setMockHuddleState({
       sessionId,
       participants: [participant],
       localMuted: false,
-      localVideoOff: !isVideo,
+      localVideoOff: true,
     });
     broadcastMockEvent({ type: 'HUDDLE_STARTED', sessionId, participant });
     onParticipantJoined?.(participant);
@@ -92,18 +98,21 @@ export async function startHuddle(options: HuddleOptions): Promise<void> {
   const tokenResult = await sdk.generateToken(sessionId);
   const token: string = tokenResult.token;
 
+  const targetContainer =
+    container ||
+    (typeof document !== 'undefined'
+      ? document.getElementById('cometchat-audio-container') || document.body
+      : null);
+
   const callSettings = new sdk.CallSettingsBuilder()
     .setSessionID(sessionId)
-    .enableDefaultLayout(false) // We render our own custom HUD
-    .setIsAudioOnlyCall(!isVideo)
-    .setMainVideoContainerSetting(
-      new sdk.MainVideoContainerSetting().setMainVideoAspectRatio('16:9'),
-    )
+    .enableDefaultLayout(false) // Custom audio HUD
+    .setIsAudioOnlyCall(true) // Voice only — strictly no video
     .build();
 
   await sdk.joinSession(
     token,
-    container,
+    targetContainer,
     callSettings,
     {
       onUserJoined: (user: { uid: string; name: string }) => {
@@ -111,7 +120,7 @@ export async function startHuddle(options: HuddleOptions): Promise<void> {
           uid: user.uid,
           name: user.name,
           isMuted: false,
-          isVideoOff: !isVideo,
+          isVideoOff: true,
           isSpeaking: false,
         };
         onParticipantJoined?.(participant);

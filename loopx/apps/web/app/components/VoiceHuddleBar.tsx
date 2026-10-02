@@ -1,26 +1,23 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React from 'react';
 import {
   Mic,
   MicOff,
-  Video,
-  VideoOff,
   PhoneOff,
-  Volume2,
   Users,
 } from './icons/Hugeicons';
 import type { HuddleParticipant } from '@repo/types';
-import { useAppContext } from '../context/AppContext';
+import { useCall } from '../hooks/useCall';
 
 function ParticipantAvatar({
   participant,
-  size = 32,
+  size = 30,
 }: {
   participant: HuddleParticipant;
   size?: number;
 }) {
-  const initials = participant.name
+  const initials = (participant.name || 'User')
     .split(' ')
     .map((w) => w[0])
     .join('')
@@ -28,25 +25,29 @@ function ParticipantAvatar({
     .slice(0, 2);
 
   const colors = [
-    'bg-indigo-600', 'bg-violet-600', 'bg-emerald-600',
-    'bg-amber-600', 'bg-rose-600', 'bg-sky-600',
+    'bg-indigo-600',
+    'bg-violet-600',
+    'bg-emerald-600',
+    'bg-amber-600',
+    'bg-rose-600',
+    'bg-sky-600',
   ];
-  const colorIdx = participant.uid.charCodeAt(0) % colors.length;
+  const colorIdx = (participant.uid || 'U').charCodeAt(0) % colors.length;
 
   return (
     <div className="relative flex-shrink-0" title={participant.name}>
       <div
         className={`
-          rounded-full flex items-center justify-center text-white font-semibold
+          rounded-full flex items-center justify-center text-white font-bold shadow-xs transition-all
           ${colors[colorIdx]}
-          ${participant.isSpeaking ? 'ring-2 ring-green-400 ring-offset-1 ring-offset-gray-900' : ''}
+          ${participant.isSpeaking ? 'ring-2 ring-emerald-400 ring-offset-2 scale-105' : 'ring-1 ring-white'}
         `}
-        style={{ width: size, height: size, fontSize: size * 0.35 }}
+        style={{ width: size, height: size, fontSize: size * 0.36 }}
       >
         {initials}
       </div>
       {participant.isMuted && (
-        <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center">
+        <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center ring-1 ring-white">
           <MicOff className="w-2 h-2 text-white" />
         </div>
       )}
@@ -54,19 +55,23 @@ function ParticipantAvatar({
   );
 }
 
-/** Animated audio wave bars */
-function AudioWave({ active }: { active: boolean }) {
+/** Animated audio wave bars for voice speaking */
+function VoiceAudioWave({ active, isSpeaking }: { active: boolean; isSpeaking: boolean }) {
   return (
-    <div className="flex items-center gap-0.5 h-4">
-      {[0, 1, 2, 3].map((i) => (
+    <div className="flex items-center gap-0.5 h-4 px-1" title={isSpeaking ? 'Speaking...' : 'Microphone Active'}>
+      {[0, 1, 2, 3, 4].map((i) => (
         <div
           key={i}
-          className="w-0.5 rounded-full bg-green-400"
+          className={`w-0.5 rounded-full transition-all duration-150 ${
+            !active
+              ? 'bg-neutral-300 h-1'
+              : isSpeaking
+                ? 'bg-emerald-500 animate-pulse'
+                : 'bg-emerald-400/80'
+          }`}
           style={{
-            height: active ? undefined : 4,
-            animation: active
-              ? `huddle-wave 1.2s ease-in-out infinite ${i * 0.15}s`
-              : undefined,
+            height: !active ? 3 : isSpeaking ? (i % 2 === 0 ? 14 : 9) : (i % 2 === 0 ? 6 : 4),
+            animation: active && isSpeaking ? `huddle-wave 0.8s ease-in-out infinite ${i * 0.12}s` : undefined,
             minHeight: 3,
             maxHeight: 14,
           }}
@@ -77,124 +82,97 @@ function AudioWave({ active }: { active: boolean }) {
 }
 
 export function VoiceHuddleBar() {
-  const { state, dispatch } = useAppContext();
-  const { huddleActive, huddleParticipants, currentUser } = state;
+  const { isInCall, isMuted, isSpeaking, elapsed, participants, leaveCall, toggleAudio } = useCall();
 
-  const [localMuted, setLocalMuted] = useState(false);
-  const [localVideoOff, setLocalVideoOff] = useState(true);
-  const [elapsed, setElapsed] = useState(0);
-  const startTimeRef = useRef<number>(Date.now());
-
-  useEffect(() => {
-    if (!huddleActive) {
-      setElapsed(0);
-      startTimeRef.current = Date.now();
-      return;
-    }
-    startTimeRef.current = Date.now();
-    const interval = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [huddleActive]);
-
-  if (!huddleActive) return null;
+  if (!isInCall) return null;
 
   const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
   const secs = String(elapsed % 60).padStart(2, '0');
 
-  async function handleMuteToggle() {
-    const next = !localMuted;
-    setLocalMuted(next);
-    const { toggleMute } = await import('@repo/cometchat-client');
-    await toggleMute(next);
-  }
-
-  async function handleVideoToggle() {
-    const next = !localVideoOff;
-    setLocalVideoOff(next);
-    const { toggleVideo } = await import('@repo/cometchat-client');
-    await toggleVideo(next);
-  }
-
-  async function handleLeave() {
-    const { leaveHuddle } = await import('@repo/cometchat-client');
-    await leaveHuddle();
-    dispatch({ type: 'SET_HUDDLE_ACTIVE', active: false });
-  }
-
   return (
-    <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 animate-fade-in">
-      <div
-        className="flex items-center gap-3 px-4 py-2.5 rounded-2xl border border-canvas-border bg-canvas-surface/95 backdrop-blur-xl shadow-2xl shadow-black/60"
-        style={{ minWidth: 320 }}
-      >
-        {/* Live indicator */}
-        <div className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-          <span className="text-xs font-semibold text-green-400">
-            {mins}:{secs}
-          </span>
-        </div>
+    <>
+      {/* Hidden audio mounting container for CometChat Calls SDK */}
+      <div id="cometchat-audio-container" className="hidden" aria-hidden="true" />
 
-        <div className="w-px h-5 bg-canvas-border" />
-
-        {/* Participant Avatars */}
-        <div className="flex -space-x-2">
-          {huddleParticipants.slice(0, 4).map((p) => (
-            <ParticipantAvatar key={p.uid} participant={p} size={28} />
-          ))}
-          {huddleParticipants.length > 4 && (
-            <div className="w-7 h-7 rounded-full bg-canvas-hover flex items-center justify-center text-[10px] text-canvas-muted ring-2 ring-canvas-surface">
-              +{huddleParticipants.length - 4}
+      {/* Floating Modern Voice Huddle Bar */}
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-fade-in select-none">
+        <div className="flex items-center gap-3 px-4 py-2.5 rounded-full bg-white/95 backdrop-blur-xl border border-neutral-200/90 shadow-2xl shadow-neutral-900/10 text-neutral-900">
+          {/* Live Voice Status Indicator & Timer */}
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+            </span>
+            <div className="flex flex-col">
+              <span className="text-[11px] font-bold text-neutral-900 leading-tight">
+                Live Voice Huddle
+              </span>
+              <span className="text-[10px] font-mono text-neutral-500 leading-none">
+                {mins}:{secs}
+              </span>
             </div>
-          )}
-        </div>
+          </div>
 
-        {/* Audio Wave */}
-        <AudioWave active={!localMuted} />
+          <div className="w-px h-5 bg-neutral-200" />
 
-        <div className="flex items-center gap-1 ml-1">
-          {/* Mute Toggle */}
-          <button
-            onClick={handleMuteToggle}
-            className={`
-              w-8 h-8 rounded-full flex items-center justify-center transition-all
-              ${localMuted
-                ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
-                : 'bg-canvas-hover text-canvas-fg hover:bg-canvas-border'
-              }
-            `}
-            title={localMuted ? 'Unmute' : 'Mute'}
-          >
-            {localMuted ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
-          </button>
+          {/* Participant Avatars */}
+          <div className="flex items-center -space-x-1.5">
+            {participants.slice(0, 4).map((p) => (
+              <ParticipantAvatar key={p.uid} participant={p} size={28} />
+            ))}
+            {participants.length > 4 && (
+              <div className="w-7 h-7 rounded-full bg-neutral-100 border border-neutral-200 flex items-center justify-center text-[10px] font-bold text-neutral-600">
+                +{participants.length - 4}
+              </div>
+            )}
+          </div>
 
-          {/* Video Toggle */}
-          <button
-            onClick={handleVideoToggle}
-            className={`
-              w-8 h-8 rounded-full flex items-center justify-center transition-all
-              ${localVideoOff
-                ? 'bg-canvas-hover text-canvas-muted hover:bg-canvas-border'
-                : 'bg-canvas-hover text-canvas-fg hover:bg-canvas-border'
-              }
-            `}
-            title={localVideoOff ? 'Turn on camera' : 'Turn off camera'}
-          >
-            {localVideoOff ? <VideoOff className="w-3.5 h-3.5" /> : <Video className="w-3.5 h-3.5" />}
-          </button>
+          {/* Audio Wave Visualizer */}
+          <VoiceAudioWave active={!isMuted} isSpeaking={isSpeaking} />
 
-          {/* Leave Huddle */}
-          <button
-            onClick={handleLeave}
-            className="w-8 h-8 rounded-full bg-red-600 hover:bg-red-500 flex items-center justify-center text-white transition-all ml-1"
-            title="Leave huddle"
-          >
-            <PhoneOff className="w-3.5 h-3.5" />
-          </button>
+          <div className="w-px h-5 bg-neutral-200" />
+
+          {/* Voice Controls: Mute & Leave (Audio Only) */}
+          <div className="flex items-center gap-1.5">
+            {/* Microphone Mute / Unmute Toggle */}
+            <button
+              type="button"
+              onClick={toggleAudio}
+              className={`
+                px-2.5 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 transition-all
+                ${isMuted
+                  ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 shadow-2xs'
+                  : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-800'
+                }
+              `}
+              title={isMuted ? 'Unmute Microphone' : 'Mute Microphone'}
+            >
+              {isMuted ? (
+                <>
+                  <MicOff className="w-3.5 h-3.5 text-red-500" />
+                  <span className="text-[11px]">Muted</span>
+                </>
+              ) : (
+                <>
+                  <Mic className="w-3.5 h-3.5 text-emerald-600" />
+                  <span className="text-[11px]">Mute</span>
+                </>
+              )}
+            </button>
+
+            {/* Leave Voice Huddle */}
+            <button
+              type="button"
+              onClick={leaveCall}
+              className="px-3 py-1.5 rounded-full bg-red-600 hover:bg-red-700 active:scale-95 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md"
+              title="Leave Voice Huddle"
+            >
+              <PhoneOff className="w-3.5 h-3.5" />
+              <span>Leave</span>
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

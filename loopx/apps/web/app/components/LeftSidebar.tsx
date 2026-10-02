@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
+import { useCall } from '../hooks/useCall';
 import {
   MacSidebar,
   Plus,
@@ -20,6 +21,7 @@ import {
 
 export function LeftSidebar() {
   const { state, dispatch, togglePostHighlight } = useAppContext();
+  const { isInCall, joinCall, leaveCall } = useCall();
   const {
     posts,
     activePostId,
@@ -116,10 +118,10 @@ export function LeftSidebar() {
             <Pin className="w-4 h-4" />
           </button>
           <button
-            onClick={() => dispatch({ type: 'SET_HUDDLE_ACTIVE', active: !huddleActive })}
-            title={huddleActive ? 'Leave Audio Huddle' : 'Join Audio Huddle'}
+            onClick={() => (isInCall ? leaveCall() : joinCall())}
+            title={isInCall ? 'Leave Audio Huddle' : 'Join Audio Huddle'}
             className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${
-              huddleActive
+              isInCall
                 ? 'bg-emerald-600 text-white shadow-xs animate-pulse'
                 : 'bg-neutral-100 hover:bg-neutral-200/80 text-neutral-700'
             }`}
@@ -255,23 +257,23 @@ export function LeftSidebar() {
             </button>
 
             <button
-              onClick={() => dispatch({ type: 'SET_HUDDLE_ACTIVE', active: !huddleActive })}
+              onClick={() => (isInCall ? leaveCall() : joinCall())}
               className={`py-2 px-2.5 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 transition-all border ${
-                huddleActive
+                isInCall
                   ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                   : 'bg-white hover:bg-neutral-100 text-neutral-800 border-neutral-200 shadow-2xs'
               }`}
             >
-              {huddleActive ? (
+              {isInCall ? (
                 <span className="flex items-center gap-0.5 mr-0.5">
                   <span className="w-0.5 h-2.5 bg-white rounded-full animate-bounce" />
                   <span className="w-0.5 h-1.5 bg-white rounded-full animate-pulse" />
                   <span className="w-0.5 h-3 bg-white rounded-full animate-bounce [animation-delay:0.15s]" />
                 </span>
               ) : (
-                <MicOff className="w-3.5 h-3.5 text-neutral-400" />
+                <Mic className="w-3.5 h-3.5 text-neutral-500" />
               )}
-              <span>{huddleActive ? 'In Huddle' : 'Live Huddle'}</span>
+              <span>{isInCall ? 'In Huddle' : 'Live Huddle'}</span>
             </button>
           </div>
 

@@ -35,6 +35,8 @@ export type { AnnotationListenerCallbacks, PresenceCallbacks } from './chat';
 export {
   // Calls / Huddle
   initCometChatCalls,
+  getCallsSDK,
+  generateCallToken,
   startHuddle,
   leaveHuddle,
   toggleMute,

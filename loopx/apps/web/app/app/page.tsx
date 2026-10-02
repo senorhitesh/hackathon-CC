@@ -16,7 +16,7 @@ interface CometChatContextValue {
   sendMessage: (
     text: string,
     targetPostId?: string,
-    media?: { url: string; name?: string; type?: 'image' | 'video' | 'file' }
+    media?: { file?: File; url: string; name?: string; type?: 'image' | 'video' | 'file' }
   ) => Promise<void>;
 }
 

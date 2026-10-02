@@ -286,6 +286,57 @@ export async function sendCometChatMessage(
   }
 }
 
+// ─── Real CometChat Media Messaging (Cloud S3 Hosted) ──────────────────────────
+
+export async function sendCometChatMediaMessage(
+  receiverId: string,
+  file: File | Blob,
+  mediaType: 'image' | 'video' | 'file' | 'audio' = 'image',
+  receiverType: 'user' | 'group' = 'group',
+  caption?: string,
+  metadata?: Record<string, any>,
+): Promise<any> {
+  if (_isMockMode) {
+    console.info('[loopx] CometChat simulation mode: media message simulated.');
+    const preview = typeof window !== 'undefined' ? URL.createObjectURL(file) : '';
+    return {
+      id: `mock_media_${Date.now()}`,
+      receiverId,
+      metadata,
+      caption,
+      data: {
+        url: preview,
+        name: (file as File).name || 'media-asset',
+        type: mediaType,
+      },
+    };
+  }
+
+  try {
+    const sdk = await getSDK();
+    const type = receiverType === 'group' ? sdk.RECEIVER_TYPE.GROUP : sdk.RECEIVER_TYPE.USER;
+
+    let cometChatMediaType = sdk.MESSAGE_TYPE.IMAGE;
+    if (mediaType === 'video') cometChatMediaType = sdk.MESSAGE_TYPE.VIDEO;
+    else if (mediaType === 'file') cometChatMediaType = sdk.MESSAGE_TYPE.FILE;
+    else if (mediaType === 'audio') cometChatMediaType = sdk.MESSAGE_TYPE.AUDIO;
+
+    const mediaMessage = new sdk.MediaMessage(receiverId, file, cometChatMediaType, type);
+    if (caption) {
+      mediaMessage.setCaption(caption);
+    }
+    if (metadata) {
+      mediaMessage.setMetadata(metadata);
+    }
+
+    const sentMsg = await sdk.sendMediaMessage(mediaMessage);
+    return sentMsg;
+  } catch (err) {
+    console.warn('[loopx] CometChat sendMediaMessage warning:', err);
+    throw err;
+  }
+}
+
 export async function fetchOnlineGroupMembers(groupId: string): Promise<{ uid: string; name: string; status: 'ONLINE' | 'OFFLINE' | 'AWAY' }[]> {
   if (_isMockMode) return [];
   try {
@@ -342,6 +393,9 @@ export async function addCometChatMessageListener(
     const listener = new sdk.MessageListener(listenerId, {
       onTextMessageReceived: (textMessage: any) => {
         onMessageReceived(textMessage);
+      },
+      onMediaMessageReceived: (mediaMessage: any) => {
+        onMessageReceived(mediaMessage);
       },
       onCustomMessageReceived: (customMessage: any) => {
         onMessageReceived(customMessage);

@@ -40,7 +40,6 @@ export function useCometChat() {
           const senderName = (rawName && rawName !== 'Collaborator' && rawName !== 'owner' && rawName !== 'client')
             ? rawName
             : `User #${shortId}`;
-          const text = msg.getText?.() || msg.text || msg.data?.text || '';
           const id = msg.getId?.()?.toString() || msg.id?.toString() || `cc_${Date.now()}`;
           const sentAt = msg.getSentAt?.() || msg.sentAt || Date.now() / 1000;
           const receiverId = msg.getReceiverId?.() || msg.receiverId || '';
@@ -53,8 +52,30 @@ export function useCometChat() {
             } catch (_) {}
           }
           const postId = meta?.postId || receiverId || 'general';
-          const mediaUrl = meta?.mediaUrl || (typeof msg.getUrl === 'function' ? msg.getUrl() : msg.data?.url) || (msg.data?.attachments?.[0]?.url);
-          const mediaName = meta?.mediaName || (typeof msg.getName === 'function' ? msg.getName() : msg.data?.name) || (msg.data?.attachments?.[0]?.name);
+
+          // Extract media cloud URL and attachment metadata
+          const rawUrl =
+            (typeof msg.getAttachment === 'function' ? msg.getAttachment()?.getFileUrl?.() : null) ||
+            msg.data?.attachments?.[0]?.url ||
+            meta?.mediaUrl ||
+            (typeof msg.getUrl === 'function' ? msg.getUrl() : msg.data?.url);
+
+          const rawFileName =
+            (typeof msg.getAttachment === 'function' ? msg.getAttachment()?.getFileName?.() : null) ||
+            msg.data?.attachments?.[0]?.name ||
+            meta?.mediaName ||
+            (typeof msg.getName === 'function' ? msg.getName() : msg.data?.name);
+
+          const rawCaption =
+            (typeof msg.getCaption === 'function' ? msg.getCaption() : null) ||
+            msg.data?.caption ||
+            (typeof msg.getText === 'function' ? msg.getText() : msg.text) ||
+            msg.data?.text ||
+            '';
+
+          const text = rawCaption || '';
+          const mediaUrl = rawUrl;
+          const mediaName = rawFileName;
           const mediaType = meta?.mediaType || (msgType === 'video' ? 'video' : 'image');
 
           if (!text && !mediaUrl) return null;
@@ -252,11 +273,11 @@ export function useCometChat() {
     async (
       text: string,
       targetPostId?: string,
-      media?: { url: string; name?: string; type?: 'image' | 'video' | 'file' }
+      media?: { file?: File; url: string; name?: string; type?: 'image' | 'video' | 'file' }
     ) => {
       if (!text.trim() && !media?.url) return;
 
-      const { sendCometChatMessage, isMockMode } = await import('@repo/cometchat-client');
+      const { sendCometChatMessage, sendCometChatMediaMessage, isMockMode } = await import('@repo/cometchat-client');
       const roomId = currentRoomRef.current;
       const effectivePostId = targetPostId || state.activePostId || roomId;
 
@@ -296,12 +317,48 @@ export function useCometChat() {
       // Send via CometChat SDK (network real-time sync with metadata)
       if (!isMockMode()) {
         try {
-          await sendCometChatMessage(roomId, text.trim() || 'Shared media attachment', 'group', {
-            postId: effectivePostId,
-            mediaUrl: media?.url,
-            mediaName: media?.name,
-            mediaType: media?.type,
-          });
+          if (media?.file) {
+            // Upload file directly to CometChat Cloud S3 media storage
+            const sentMedia = await sendCometChatMediaMessage(
+              roomId,
+              media.file,
+              media.type || 'image',
+              'group',
+              text.trim(),
+              {
+                postId: effectivePostId,
+                mediaName: media.name || media.file.name,
+                mediaType: media.type,
+              },
+            );
+
+            // If CometChat returns the uploaded cloud S3 URL, update local & broadcast
+            const cloudUrl =
+              (typeof sentMedia?.getAttachment === 'function' ? sentMedia.getAttachment()?.getFileUrl?.() : null) ||
+              sentMedia?.data?.attachments?.[0]?.url ||
+              sentMedia?.data?.url;
+
+            if (cloudUrl && cloudUrl !== localMsg.mediaUrl) {
+              localMsg.mediaUrl = cloudUrl;
+              if (typeof BroadcastChannel !== 'undefined') {
+                const bc = new BroadcastChannel(`canvas_collab_${roomId}`);
+                bc.postMessage({
+                  type: 'canvas_sync',
+                  event: 'CHAT_MESSAGE',
+                  senderUid: state.currentUser.uid,
+                  message: localMsg,
+                });
+                bc.close();
+              }
+            }
+          } else {
+            await sendCometChatMessage(roomId, text.trim() || 'Shared media attachment', 'group', {
+              postId: effectivePostId,
+              mediaUrl: media?.url,
+              mediaName: media?.name,
+              mediaType: media?.type,
+            });
+          }
         } catch (err) {
           console.warn('[loopx] Failed to send CometChat message:', err);
         }

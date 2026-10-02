@@ -32,12 +32,35 @@ export function CreatePostModal() {
     setError('');
     setIsUploading(true);
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const dataUri = event.target?.result as string;
       if (dataUri) {
         setMediaUrl(dataUri);
       }
-      setIsUploading(false);
+      try {
+        const { sendCometChatMediaMessage, isMockMode } = await import('@repo/cometchat-client');
+        if (!isMockMode()) {
+          const sentMedia = await sendCometChatMediaMessage(
+            state.roomId || 'general',
+            file,
+            file.type.startsWith('video') ? 'video' : 'image',
+            'group',
+            'Post creative asset',
+            { type: 'post_asset' }
+          );
+          const cloudUrl =
+            (typeof sentMedia?.getAttachment === 'function' ? sentMedia.getAttachment()?.getFileUrl?.() : null) ||
+            sentMedia?.data?.attachments?.[0]?.url ||
+            sentMedia?.data?.url;
+          if (cloudUrl) {
+            setMediaUrl(cloudUrl);
+          }
+        }
+      } catch (err) {
+        console.info('[loopx] CometChat post asset upload fallback to local preview:', err);
+      } finally {
+        setIsUploading(false);
+      }
     };
     reader.readAsDataURL(file);
   }

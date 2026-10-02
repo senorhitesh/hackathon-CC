@@ -16,6 +16,7 @@ export {
   addAnnotationListener,
   addPresenceListener,
   sendCometChatMessage,
+  sendCometChatMediaMessage,
   fetchCometChatMessageHistory,
   addCometChatMessageListener,
   // Group Management

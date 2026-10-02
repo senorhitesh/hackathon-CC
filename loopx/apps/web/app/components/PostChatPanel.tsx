@@ -87,6 +87,7 @@ export function PostChatPanel() {
         currentPostId || undefined,
         selectedMedia
           ? {
+              file: selectedMedia.file,
               url: selectedMedia.previewUrl,
               name: selectedMedia.name,
               type: selectedMedia.type,

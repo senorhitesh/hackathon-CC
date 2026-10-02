@@ -7,7 +7,7 @@ import {
   RotateCcw,
   MessageSquare,
   Filter,
-} from 'lucide-react';
+} from './icons/Hugeicons';
 import { useState } from 'react';
 import type { PinAnnotation } from '@repo/types';
 import { useAppContext } from '../context/AppContext';

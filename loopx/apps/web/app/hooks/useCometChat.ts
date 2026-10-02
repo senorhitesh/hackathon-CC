@@ -1,88 +1,202 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { useAppContext } from '../context/AppContext';
-import type { PinAnnotation, ActiveUser } from '@repo/types';
+import { useEffect, useRef, useCallback } from 'react';
+import { useAppContext, type ChatMessage } from '../context/AppContext';
+import type { PinAnnotation } from '@repo/types';
 
 /**
- * useCometChat — initializes the CometChat SDK (or mock mode) and registers
- * real-time listeners for annotation messages and user presence.
- * Should be mounted once at the app root level.
+ * useCometChat — Complete production integration hook.
+ *
+ * Lifecycle:
+ * 1. Initialize CometChat Chat SDK + Calls SDK
+ * 2. Create or log in the current user
+ * 3. Create or join the CometChat group for the current room
+ * 4. Fetch message history and populate chat
+ * 5. Register real-time listeners for messages, annotations, and presence
+ *
+ * Should be mounted once at the workspace level (/app page).
  */
 export function useCometChat() {
-  const { state, dispatch, addAnnotation } = useAppContext();
+  const { state, dispatch } = useAppContext();
   const initialized = useRef(false);
+  const cleanupRef = useRef<(() => void)[]>([]);
+  const currentRoomRef = useRef(state.roomId);
 
+  // Keep room ref in sync
+  useEffect(() => {
+    currentRoomRef.current = state.roomId;
+  }, [state.roomId]);
+
+  // ─── Helper: Map CometChat SDK message → our ChatMessage ───────────────────
+  const mapSdkMessage = useCallback(
+    (msg: any): ChatMessage | null => {
+      try {
+        // Text messages
+        if (msg.getType?.() === 'text' || msg.type === 'text') {
+          const senderUid = msg.getSender?.()?.getUid?.() || msg.sender?.uid || msg.senderUid || '';
+          const rawName = msg.getSender?.()?.getName?.() || msg.sender?.name || msg.senderName;
+          const shortId = (senderUid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '').slice(-4).toUpperCase() || '7F2A';
+          const senderName = (rawName && rawName !== 'Collaborator' && rawName !== 'owner' && rawName !== 'client')
+            ? rawName
+            : `User #${shortId}`;
+          const text = msg.getText?.() || msg.text || msg.data?.text || '';
+          const id = msg.getId?.()?.toString() || msg.id?.toString() || `cc_${Date.now()}`;
+          const sentAt = msg.getSentAt?.() || msg.sentAt || Date.now() / 1000;
+          const receiverId = msg.getReceiverId?.() || msg.receiverId || '';
+
+          // Read postId from metadata if present
+          let meta = msg.getMetadata?.() || msg.metadata || msg.data?.metadata;
+          if (typeof meta === 'string') {
+            try {
+              meta = JSON.parse(meta);
+            } catch (_) {}
+          }
+          const postId = meta?.postId || receiverId || 'general';
+
+          if (!text) return null;
+
+          return {
+            id: `cc_${id}`,
+            postId,
+            senderUid,
+            senderName,
+            senderRole: `ID: #${shortId}`,
+            text,
+            timestamp: typeof sentAt === 'number' && sentAt < 1e12 ? sentAt * 1000 : sentAt,
+          };
+        }
+        return null;
+      } catch {
+        return null;
+      }
+    },
+    [state.currentUser.uid, state.currentUser.role],
+  );
+
+  // ─── Main Initialization Effect ────────────────────────────────────────────
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
-
-    let cleanupAnnotationListener: (() => void) | undefined;
-    let cleanupMockBroadcast: (() => void) | undefined;
-    let cleanupPresence: (() => void) | undefined;
 
     async function init() {
       const {
         initCometChat,
         initCometChatCalls,
-        loginUser,
+        createOrGetUser,
+        getOrCreateGroup,
+        fetchCometChatMessageHistory,
+        fetchOnlineGroupMembers,
+        addCometChatMessageListener,
         addAnnotationListener,
         addPresenceListener,
+        isMockMode,
         getMockCurrentUser,
         initMockBroadcast,
-        isMockMode,
-        MOCK_USERS,
       } = await import('@repo/cometchat-client');
 
-      // Step 1: Init Chat SDK
-      await initCometChat();
+      // ── Step 1: Init Chat SDK ──────────────────────────────────────────────
+      const chatReady = await initCometChat();
+      console.info('[loopx] CometChat SDK initialized. Live mode:', chatReady);
 
-      // Step 2: Init Calls SDK
+      // ── Step 2: Init Calls SDK ─────────────────────────────────────────────
       await initCometChatCalls();
 
-      // Step 3: Determine current user
-      const mockUser = getMockCurrentUser();
-      const loggedIn = await loginUser(mockUser.uid);
+      // ── Step 3: Login / Create User ────────────────────────────────────────
+      let loggedInUser: { uid: string; name: string };
 
-      // Update state with current user
-      dispatch({
-        type: 'SET_ACTIVE_USERS',
-        users: [
-          {
-            uid: loggedIn.uid,
-            name: loggedIn.name,
-            status: 'ONLINE',
-          },
-        ],
-      });
-
-      // Update current user name in state
-      dispatch({
-        type: 'USER_JOINED',
-        user: { uid: loggedIn.uid, name: loggedIn.name, status: 'ONLINE' },
-      });
-
-      // Step 4: In mock mode, init BroadcastChannel for cross-tab events
       if (isMockMode()) {
-        // Show simulated active users
-        const otherUsers: ActiveUser[] = MOCK_USERS
-          .filter((u) => u.uid !== loggedIn.uid)
-          .map((u) => ({ ...u, status: 'ONLINE' as const }))
-          .slice(0, 2);
-
-        otherUsers.forEach((u) => dispatch({ type: 'USER_JOINED', user: u }));
-
-        cleanupMockBroadcast = initMockBroadcast();
+        const mockUser = getMockCurrentUser();
+        loggedInUser = { uid: mockUser.uid, name: mockUser.name };
+      } else {
+        // Use current user from AppContext (set during login flow)
+        const { uid, name } = state.currentUser;
+        loggedInUser = await createOrGetUser(uid, name || 'Collaborator');
       }
 
-      // Step 5: Add annotation listener
-      const listenerId = `loopx_annotations_${state.roomId}`;
-      cleanupAnnotationListener = await addAnnotationListener(listenerId, {
+      // Update state with authenticated user
+      dispatch({
+        type: 'SET_USER',
+        user: {
+          ...state.currentUser,
+          uid: loggedInUser.uid,
+          name: loggedInUser.name,
+          status: 'ONLINE',
+          isLoggedIn: true,
+        },
+      });
+
+      dispatch({
+        type: 'USER_JOINED',
+        user: { uid: loggedInUser.uid, name: loggedInUser.name, status: 'ONLINE' },
+      });
+
+      // ── Step 4: Create/Join CometChat Group for Room ───────────────────────
+      const roomId = currentRoomRef.current;
+      const group = await getOrCreateGroup(roomId, state.sessionName || 'Creative Workspace');
+      console.info('[loopx] CometChat group ready:', roomId, group ? '✓' : '✗');
+
+      // Fetch online group members so collaborators are immediately detected
+      if (!isMockMode()) {
+        try {
+          const members = await fetchOnlineGroupMembers(roomId);
+          for (const m of members) {
+            if (m.uid !== loggedInUser.uid) {
+              dispatch({ type: 'USER_JOINED', user: m });
+            }
+          }
+        } catch (_) {}
+      }
+
+      // ── Step 5: Fetch Message History ──────────────────────────────────────
+      if (!isMockMode()) {
+        try {
+          const history = await fetchCometChatMessageHistory(roomId, 50);
+          if (history && history.length > 0) {
+            const mapped: ChatMessage[] = [];
+            for (const msg of history) {
+              const chatMsg = mapSdkMessage(msg);
+              if (
+                chatMsg &&
+                !chatMsg.text.toLowerCase().includes('testing cometchat integration live message') &&
+                !chatMsg.text.toLowerCase().includes('voice review confirmed. 🎙️ voice review confirmed')
+              ) {
+                mapped.push(chatMsg);
+              }
+            }
+            if (mapped.length > 0) {
+              dispatch({ type: 'SET_CHAT_MESSAGES', messages: mapped });
+              console.info(`[loopx] Loaded ${mapped.length} messages from CometChat history.`);
+            }
+          }
+        } catch (err) {
+          console.warn('[loopx] Failed to fetch message history:', err);
+        }
+      }
+
+      // ── Step 6: Real-time Message Listener ─────────────────────────────────
+      const messageListenerId = `loopx_chat_${roomId}`;
+      const cleanupMessages = await addCometChatMessageListener(
+        messageListenerId,
+        (message: any) => {
+          // Skip our own messages (already dispatched locally)
+          const senderUid = message.getSender?.()?.getUid?.() || message.sender?.uid || '';
+          if (senderUid === loggedInUser.uid) return;
+
+          const chatMsg = mapSdkMessage(message);
+          if (chatMsg) {
+            dispatch({ type: 'ADD_CHAT_MESSAGE', message: chatMsg });
+          }
+        },
+      );
+      cleanupRef.current.push(cleanupMessages);
+
+      // ── Step 7: Annotation Listener ────────────────────────────────────────
+      const annotationListenerId = `loopx_annotations_${roomId}`;
+      const cleanupAnnotations = await addAnnotationListener(annotationListenerId, {
         onAnnotationCreated: (annotation: PinAnnotation) => {
-          // Only add if not already in state (prevents duplicating own sends)
           dispatch({ type: 'ADD_ANNOTATION', annotation });
         },
-        onAnnotationResolved: (id: string, resolvedBy: string, full: PinAnnotation) => {
+        onAnnotationResolved: (id: string, resolvedBy: string) => {
           dispatch({
             type: 'RESOLVE_ANNOTATION',
             id,
@@ -94,10 +208,14 @@ export function useCometChat() {
           dispatch({ type: 'REOPEN_ANNOTATION', id });
         },
       });
+      cleanupRef.current.push(cleanupAnnotations);
 
-      // Step 6: Add presence listener (real mode only)
-      if (!isMockMode()) {
-        cleanupPresence = await addPresenceListener(`presence_${state.roomId}`, {
+      // ── Step 8: Presence Listener ──────────────────────────────────────────
+      if (isMockMode()) {
+        const cleanupMock = initMockBroadcast();
+        cleanupRef.current.push(cleanupMock);
+      } else {
+        const cleanupPresence = await addPresenceListener(`presence_${roomId}`, {
           onUserOnline: (uid, name) => {
             dispatch({ type: 'USER_JOINED', user: { uid, name, status: 'ONLINE' } });
           },
@@ -105,16 +223,73 @@ export function useCometChat() {
             dispatch({ type: 'USER_LEFT', uid });
           },
         });
+        cleanupRef.current.push(cleanupPresence);
       }
+
+      console.info('[loopx] All CometChat listeners registered. Ready for real-time collaboration.');
     }
 
-    init().catch(console.error);
+    init().catch((err) => {
+      console.error('[loopx] CometChat initialization failed:', err);
+    });
 
     return () => {
-      cleanupAnnotationListener?.();
-      cleanupMockBroadcast?.();
-      cleanupPresence?.();
+      cleanupRef.current.forEach((fn) => fn());
+      cleanupRef.current = [];
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ─── Send Chat Message via CometChat & BroadcastChannel ───────────────────
+  const sendMessage = useCallback(
+    async (text: string, targetPostId?: string) => {
+      if (!text.trim()) return;
+
+      const { sendCometChatMessage, isMockMode } = await import('@repo/cometchat-client');
+      const roomId = currentRoomRef.current;
+      const effectivePostId = targetPostId || state.activePostId || roomId;
+
+      const shortId = (state.currentUser.uid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '').slice(-4).toUpperCase() || '7F2A';
+      const cleanSenderName = (state.currentUser.name && state.currentUser.name !== 'Collaborator' && state.currentUser.name !== 'owner')
+        ? state.currentUser.name
+        : `User #${shortId}`;
+
+      // Optimistically dispatch locally
+      const localMsg: ChatMessage = {
+        id: `local_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+        postId: effectivePostId,
+        senderUid: state.currentUser.uid,
+        senderName: cleanSenderName,
+        senderRole: `ID: #${shortId}`,
+        text: text.trim(),
+        timestamp: Date.now(),
+      };
+
+      dispatch({ type: 'ADD_CHAT_MESSAGE', message: localMsg });
+
+      // Cross-tab real-time sync
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel(`canvas_collab_${roomId}`);
+        bc.postMessage({
+          type: 'canvas_sync',
+          event: 'CHAT_MESSAGE',
+          senderUid: state.currentUser.uid,
+          message: localMsg,
+        });
+        bc.close();
+      }
+
+      // Send via CometChat SDK (network real-time sync with metadata)
+      if (!isMockMode()) {
+        try {
+          await sendCometChatMessage(roomId, text.trim(), 'group', { postId: effectivePostId });
+        } catch (err) {
+          console.warn('[loopx] Failed to send CometChat message:', err);
+        }
+      }
+    },
+    [state.currentUser.uid, state.currentUser.name, state.currentUser.role, state.activePostId, dispatch],
+  );
+
+  return { sendMessage };
 }

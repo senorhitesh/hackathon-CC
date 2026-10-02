@@ -168,8 +168,9 @@ export interface BoardPost {
   roomId: string;
   title: string;
   description?: string;
-  mediaUrl: string;
-  mediaType: 'image' | 'video';
+  content?: string;
+  mediaUrl?: string;
+  mediaType?: 'image' | 'video' | 'none';
   preset: PlatformPreset;
   status: 'DRAFT' | 'IN_REVIEW' | 'CHANGES_REQUESTED' | 'APPROVED';
   createdBy: string;
@@ -177,6 +178,7 @@ export interface BoardPost {
   createdAt: number;
   x?: number;
   y?: number;
+  isHighlighted?: boolean;
 }
 
 export interface BoardRoom {

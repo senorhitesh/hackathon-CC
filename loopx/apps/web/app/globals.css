@@ -1,20 +1,32 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ─── loopx Design System Base ──────────────────────────────────────────────── */
+/* ─── Vercel & Linear-Grade Studio Design Foundation ───────────────────── */
 
 :root {
-  --ap-bg: #f8fafc;
+  --vbg-surface-primary: #ffffff;
+  --vbg-surface-secondary: #fafafa;
+  --vbg-surface-elevated: #ffffff;
+  --vbg-surface-contrast: #000000;
+  --vbg-border-subtle: #eaeaea;
+  --vbg-border-default: #e5e5e5;
+  --vbg-border-strong: #171717;
+  --vbg-text-primary: #0a0a0a;
+  --vbg-text-secondary: #525252;
+  --vbg-text-muted: #737373;
+  --vbg-text-on-contrast: #ffffff;
+  --vbg-focus: #000000;
+  
+  --ap-bg: #f9fafb;
   --ap-surface: #ffffff;
-  --ap-border: #e2e8f0;
-  --ap-hover: #f1f5f9;
-  --ap-muted: #64748b;
-  --ap-fg: #0f172a;
+  --ap-border: #e5e7eb;
+  --ap-hover: #f3f4f6;
+  --ap-muted: #6b7280;
+  --ap-fg: #111827;
   --ap-accent: #0f172a;
-  --ap-accent-hover: #334155;
-  --pin-open: #6366f1;
-  --pin-resolved: #16a34a;
 }
 
 *,
@@ -27,25 +39,59 @@
 
 html {
   color-scheme: light;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body, button, input, select, textarea {
+  font-family: var(--font-dm-sans), var(--font-geist-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  letter-spacing: -0.011em;
+}
+
+.font-serif {
+  font-family: var(--font-dm-serif), Georgia, serif;
 }
 
 body {
-  background-color: var(--ap-bg);
-  color: var(--ap-fg);
-  font-family: 'GeistVF', system-ui, -apple-system, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  overflow: hidden;
-  height: 100dvh;
-  max-height: 100dvh;
+  background-color: #fafafa;
+  color: #0f172a;
+  min-height: 100vh;
 }
 
-/* ─── Dot Grid Canvas Pattern ────────────────────────────────────────────────── */
+/* ─── High-DPI Crisp Dot Grid Canvas ────────────────────────────────────────── */
 
 .dot-canvas {
   background-color: #f8fafc;
-  background-image: radial-gradient(#cbd5e1 1.2px, transparent 1.2px);
-  background-size: 20px 20px;
+  background-image: radial-gradient(rgba(15, 23, 42, 0.12) 1.1px, transparent 1.1px);
+  background-size: 22px 22px;
+}
+
+/* ─── Glass & Surface Utilities ────────────────────────────────────────────── */
+
+.glass-surface {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.03);
+}
+
+.glass-dock {
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 12px 36px -4px rgba(15, 23, 42, 0.12), 0 4px 12px -2px rgba(15, 23, 42, 0.06);
+}
+
+.node-card {
+  box-shadow: 0 4px 24px -4px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(15, 23, 42, 0.04);
+  transition: box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.node-card:hover {
+  box-shadow: 0 12px 32px -6px rgba(15, 23, 42, 0.12), 0 2px 6px rgba(15, 23, 42, 0.04);
 }
 
 /* ─── Scrollbars ────────────────────────────────────────────────────────────── */
@@ -68,69 +114,57 @@ body {
 /* ─── Selection ─────────────────────────────────────────────────────────────── */
 
 ::selection {
-  background: #6366f125;
-  color: #0f172a;
+  background: #0f172a;
+  color: #ffffff;
 }
 
-/* ─── Pin Cursor ────────────────────────────────────────────────────────────── */
+/* ─── Pin Cursor & Markers ──────────────────────────────────────────────────── */
 
 .cursor-pin {
   cursor: crosshair;
 }
-
-/* ─── Canvas Artboard ───────────────────────────────────────────────────────── */
-
-.artboard-shadow {
-  box-shadow:
-    0 0 0 1px #e2e8f0,
-    0 10px 30px -5px rgba(0, 0, 0, 0.08),
-    0 4px 12px -2px rgba(0, 0, 0, 0.04);
-}
-
-/* ─── Pin Marker ────────────────────────────────────────────────────────────── */
 
 .pin-marker {
   position: absolute;
   transform: translate(-50%, -50%);
   pointer-events: auto;
   z-index: 50;
-  transition: transform 0.15s ease;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .pin-marker:hover {
-  transform: translate(-50%, -50%) scale(1.15);
+  transform: translate(-50%, -50%) scale(1.18);
   z-index: 60;
 }
 
-.pin-ring {
+/* ─── Live Multiplayer Cursor ───────────────────────────────────────────────── */
+
+.collaborator-cursor {
   position: absolute;
-  inset: -4px;
-  border-radius: 50%;
-  animation: pin-ring-pulse 2s ease-out infinite;
+  pointer-events: none;
+  z-index: 100;
+  transition: transform 0.06s linear;
 }
-
-@keyframes pin-ring-pulse {
-  0% { transform: scale(1); opacity: 0.5; }
-  70% { transform: scale(1.8); opacity: 0; }
-  100% { transform: scale(1.8); opacity: 0; }
-}
-
-/* ─── Transitions ───────────────────────────────────────────────────────────── */
-
-.transition-base {
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* ─── Drag-select styles ────────────────────────────────────────────────────── */
-
-.canvas-element-selected {
-  outline: 2px solid #6366f1;
-  outline-offset: 1px;
-}
-
-/* ─── No select on canvas drag ──────────────────────────────────────────────── */
 
 .no-select {
   user-select: none;
   -webkit-user-select: none;
 }
+
+/* ─── Aura Glow for Highlighted Post Cards ──────────────────────────────────── */
+
+.aura-glow {
+  box-shadow: 0 0 25px 4px rgba(139, 92, 246, 0.45), 0 0 55px 12px rgba(168, 85, 247, 0.3), 0 0 90px 20px rgba(236, 72, 153, 0.2) !important;
+  border-color: rgba(168, 85, 247, 0.9) !important;
+  animation: aura-glow-pulse 2.8s ease-in-out infinite alternate;
+}
+
+@keyframes aura-glow-pulse {
+  0% {
+    box-shadow: 0 0 20px 4px rgba(139, 92, 246, 0.4), 0 0 45px 10px rgba(168, 85, 247, 0.25), 0 0 75px 16px rgba(236, 72, 153, 0.15);
+  }
+  100% {
+    box-shadow: 0 0 35px 8px rgba(139, 92, 246, 0.65), 0 0 75px 18px rgba(168, 85, 247, 0.45), 0 0 115px 28px rgba(236, 72, 153, 0.3);
+  }
+}
+

@@ -2,267 +2,325 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useAppContext } from '../context/AppContext';
+import { useCometChatContext } from '../app/page';
 import {
-  Send,
+  ArrowUp,
   Sparkles,
   MessageSquare,
-  Bot,
   User,
   CheckCircle2,
   Clock,
-  AlertCircle,
   Pin,
-  RefreshCw,
-} from 'lucide-react';
+  Menu,
+  Plus,
+  Image as ImageIcon,
+  Paperclip,
+  Mic,
+  X,
+} from './icons/Hugeicons';
 import type { BoardPost } from '@repo/types';
 
-interface ChatMessage {
-  id: string;
-  senderName: string;
-  senderRole: 'owner' | 'client' | 'ai';
-  text: string;
-  timestamp: number;
-}
-
 export function PostChatPanel() {
-  const { state, dispatch, resolveAnnotation } = useAppContext();
-  const { posts, activePostId, annotations, currentUser, roomId } = state;
-  const [activeTab, setActiveTab] = useState<'chat' | 'pins' | 'ai'>('chat');
+  const { state, dispatch, togglePostHighlight, clearChatMessages } = useAppContext();
+  const { sendMessage } = useCometChatContext();
+  const { posts, activePostId, annotations, currentUser, chatMessages, collaborators } = state;
   const [inputText, setInputText] = useState('');
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 'msg_1',
-      senderName: 'Sarah Rivera (Owner)',
-      senderRole: 'owner',
-      text: 'Hey! Uploaded the latest 1:1 post version for your review. Let me know if you need copy changes!',
-      timestamp: Date.now() - 3600000,
-    },
-    {
-      id: 'msg_2',
-      senderName: 'Client Guest',
-      senderRole: 'client',
-      text: 'Looks great! Can we tweak the headline font size slightly and test a bolder call to action?',
-      timestamp: Date.now() - 1800000,
-    },
-  ]);
-
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const activePost = posts.find((p) => p.id === activePostId) ?? posts[0];
+
+  const currentPostId = activePostId || (posts.length > 0 ? posts[0]?.id : null);
+  const activePost = posts.find((p) => p.id === currentPostId);
+
+  // Each post has its own unique chat thread
+  const postMessages = currentPostId
+    ? chatMessages.filter((m) => m.postId === currentPostId)
+    : chatMessages.filter((m) => m.postId === state.roomId || m.postId === 'general');
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [postMessages.length]);
 
-  async function handleSendMessage(e: React.FormEvent) {
-    e.preventDefault();
-    if (!inputText.trim()) return;
+  async function handleSend(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    if (!inputText.trim() || isSending) return;
 
-    const newMsg: ChatMessage = {
-      id: `msg_${Date.now()}`,
-      senderName: currentUser.name,
-      senderRole: currentUser.role,
-      text: inputText.trim(),
-      timestamp: Date.now(),
-    };
-
-    setMessages((prev) => [...prev, newMsg]);
-    setInputText('');
-
-    // Try CometChat SDK send message if available
+    setIsSending(true);
     try {
-      const { sendAnnotation } = await import('@repo/cometchat-client');
-      // SDK message trigger
-    } catch (_) {}
-
-    // Simulated CometChat AI Agent auto-response
-    if (activeTab === 'ai' || inputText.toLowerCase().includes('ai') || inputText.toLowerCase().includes('copy')) {
-      setTimeout(() => {
-        const aiResponse: ChatMessage = {
-          id: `ai_${Date.now()}`,
-          senderName: 'CometChat AI Agent',
-          senderRole: 'ai',
-          text: `✨ AI Suggestion for "${activePost?.title ?? 'Post'}":\nHere is an optimized headline: "Unleash Your Summer Style — Limited 20% Off Code!"`,
-          timestamp: Date.now(),
-        };
-        setMessages((prev) => [...prev, aiResponse]);
-      }, 1000);
+      await sendMessage(inputText.trim(), currentPostId || undefined);
+    } catch (err) {
+      console.warn('[loopx] Send message failed:', err);
     }
+    setInputText('');
+    setIsSending(false);
   }
 
-  function handleStatusChange(status: BoardPost['status']) {
-    if (!activePost) return;
-    dispatch({ type: 'UPDATE_POST_STATUS', postId: activePost.id, status });
+  async function handleQuickPrompt(text: string) {
+    setIsSending(true);
+    try {
+      await sendMessage(text, currentPostId || undefined);
+    } catch (err) {
+      console.warn('[loopx] Quick prompt failed:', err);
+    }
+    setIsSending(false);
+  }
+
+  if (isMinimized) {
+    return (
+      <button
+        onClick={() => setIsMinimized(false)}
+        className="fixed bottom-6 right-6 z-40 bg-neutral-900/95 hover:bg-black backdrop-blur-md border border-neutral-800 text-white rounded-full shadow-2xl px-4 py-2.5 flex items-center gap-2 transition-all font-medium text-xs animate-fade-in hover:scale-105 active:scale-95"
+      >
+        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+        <MessageSquare className="w-3.5 h-3.5 text-neutral-300" />
+        <span className="font-semibold tracking-tight">Live Chat</span>
+        {postMessages.length > 0 && (
+          <span className="px-1.5 py-0.2 rounded-full bg-white/20 text-white text-[10px] font-mono font-bold flex items-center justify-center">
+            {postMessages.length}
+          </span>
+        )}
+      </button>
+    );
   }
 
   return (
-    <aside className="w-80 bg-white border-l border-slate-200 flex flex-col h-full flex-shrink-0 z-30 select-none shadow-xs">
-      {/* Top Header: Post Title & Status Dropdown (Wireframe Image 5 style) */}
-      <div className="p-3.5 border-b border-slate-200 bg-slate-50/70">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            Iterate & Chat Section
-          </span>
-          <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-            CometChat Live
-          </span>
-        </div>
-        <h3 className="text-xs font-bold text-slate-900 truncate">
-          {activePost?.title ?? 'Select a Post'}
-        </h3>
-
-        {/* Status Picker Buttons */}
-        {activePost && (
-          <div className="flex items-center gap-1 mt-2">
-            {(['DRAFT', 'IN_REVIEW', 'CHANGES_REQUESTED', 'APPROVED'] as const).map((st) => (
-              <button
-                key={st}
-                onClick={() => handleStatusChange(st)}
-                className={`px-2 py-1 rounded-md text-[10px] font-semibold transition-all ${
-                  activePost.status === st
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                {st.replace('_', ' ')}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Mode Switcher Tabs */}
-      <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 border-b border-slate-200 text-xs">
-        <button
-          onClick={() => setActiveTab('chat')}
-          className={`flex items-center justify-center gap-1 py-1.5 font-semibold rounded-lg transition-all ${
-            activeTab === 'chat'
-              ? 'bg-white text-slate-900 shadow-xs'
-              : 'text-slate-500 hover:text-slate-900'
-          }`}
-        >
-          <MessageSquare className="w-3.5 h-3.5 text-indigo-600" />
-          <span>Chat</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('pins')}
-          className={`flex items-center justify-center gap-1 py-1.5 font-semibold rounded-lg transition-all ${
-            activeTab === 'pins'
-              ? 'bg-white text-slate-900 shadow-xs'
-              : 'text-slate-500 hover:text-slate-900'
-          }`}
-        >
-          <Pin className="w-3.5 h-3.5 text-amber-600" />
-          <span>Pins ({annotations.length})</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('ai')}
-          className={`flex items-center justify-center gap-1 py-1.5 font-semibold rounded-lg transition-all ${
-            activeTab === 'ai'
-              ? 'bg-white text-slate-900 shadow-xs'
-              : 'text-slate-500 hover:text-slate-900'
-          }`}
-        >
-          <Bot className="w-3.5 h-3.5 text-purple-600" />
-          <span>AI Agent</span>
-        </button>
-      </div>
-
-      {/* Main Tab Body */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
-        {activeTab === 'chat' || activeTab === 'ai' ? (
-          /* CometChat Messages List */
-          <div className="space-y-3">
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex flex-col ${
-                  msg.senderRole === 'ai'
-                    ? 'bg-purple-50/70 border-purple-200 text-purple-950 p-2.5 rounded-xl border'
-                    : msg.senderRole === 'owner'
-                    ? 'bg-slate-50 border-slate-200 p-2.5 rounded-xl border'
-                    : 'bg-indigo-50/60 border-indigo-100 p-2.5 rounded-xl border'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[11px] font-bold text-slate-900 flex items-center gap-1">
-                    {msg.senderRole === 'ai' && <Sparkles className="w-3 h-3 text-purple-600" />}
-                    {msg.senderName}
-                  </span>
-                  <span className="text-[9px] text-slate-400 font-mono">
-                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
-                  {msg.text}
-                </p>
-              </div>
-            ))}
-            <div ref={messagesEndRef} />
-          </div>
-        ) : (
-          /* Pin Feedback Annotations List */
-          <div className="space-y-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-              Contextual Pin Feedback
+    <aside className="w-[340px] bg-white/95 backdrop-blur-md border-l border-neutral-200 flex flex-col h-[calc(100vh-48px)] flex-shrink-0 z-30 select-none shadow-xl transition-all font-sans">
+      {/* ── Top Header (Matching Image 1) ── */}
+      <div className="px-4 py-3.5 border-b border-neutral-100 flex items-center justify-between bg-white">
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setIsMinimized(true)}
+            title="Minimize"
+            className="w-8 h-8 rounded-full hover:bg-neutral-100 flex items-center justify-center text-neutral-600 transition-colors"
+          >
+            <Menu className="w-4 h-4" />
+          </button>
+          <div>
+            <h3 className="text-xs font-semibold text-neutral-900">
+              {activePost ? activePost.title : 'Live Discussion'}
+            </h3>
+            <span className="text-[10px] font-mono text-emerald-600 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              CometChat Live
             </span>
-            {annotations.length === 0 ? (
-              <div className="text-center py-8 text-slate-400 text-xs">
-                No pin annotations added yet. Toggle "Pin Feedback" mode on canvas to place pins on the post image.
-              </div>
-            ) : (
-              annotations.map((pin, idx) => (
-                <div
-                  key={pin.id}
-                  className="p-2.5 rounded-xl border border-slate-200 bg-white shadow-2xs space-y-1.5"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">
-                        {idx + 1}
-                      </span>
-                      <span className="text-xs font-bold text-slate-800">{pin.authorName}</span>
-                    </div>
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                      pin.status === 'RESOLVED' ? 'bg-emerald-100 text-emerald-700' : 'bg-indigo-100 text-indigo-700'
-                    }`}>
-                      {pin.status}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-600">{pin.comment}</p>
-                  {pin.status === 'OPEN' && (
-                    <button
-                      onClick={() => resolveAnnotation(pin.id)}
-                      className="text-[10px] font-semibold text-emerald-600 hover:underline flex items-center gap-1"
-                    >
-                      <CheckCircle2 className="w-3 h-3" />
-                      <span>Mark Resolved</span>
-                    </button>
-                  )}
-                </div>
-              ))
-            )}
           </div>
-        )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => dispatch({ type: 'TOGGLE_MODAL', modal: 'isCreatePostOpen', value: true })}
+            title="New Creative Node"
+            className="w-7 h-7 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-700 flex items-center justify-center transition-colors shadow-xs"
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+          <div className="w-7 h-7 rounded-full p-[1.5px] bg-gradient-to-tr from-pink-500 via-amber-400 to-blue-500 shrink-0">
+            <div className="w-full h-full rounded-full bg-white flex items-center justify-center text-[10px] font-bold text-neutral-800">
+              {currentUser.name.substring(0, 2).toUpperCase()}
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Input Box */}
-      <form onSubmit={handleSendMessage} className="p-3 border-t border-slate-200 bg-white">
-        <div className="relative flex items-center">
+      {/* ── Scrollable Body ── */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Welcome Section (Matching Image 1) */}
+        <div className="bg-gradient-to-b from-blue-50/50 via-white to-transparent p-3.5 rounded-2xl border border-blue-100/60">
+          <div className="flex items-center gap-1.5 text-blue-600 mb-1">
+            <Sparkles className="w-4 h-4" />
+            <span className="text-[11px] font-semibold uppercase tracking-wider">
+              Creative Thread
+            </span>
+          </div>
+          <h2 className="text-sm font-semibold text-neutral-900">
+            Hi, {currentUser.name.split(' ')[0]} 👋
+          </h2>
+          <p className="text-xs text-neutral-500 mt-0.5 leading-relaxed">
+            Collaborate with your partner on ad copy, visual assets, and approvals in real-time.
+          </p>
+
+          {/* 3 Quick Action Chips (Matching Image 1 design) */}
+          <div className="grid grid-cols-3 gap-2 mt-3">
+            <button
+              type="button"
+              onClick={() => handleQuickPrompt('Could we test a bolder headline copy for this creative?')}
+              className="p-2 rounded-xl bg-gradient-to-br from-purple-50 to-indigo-50/70 border border-purple-100/80 hover:border-purple-300 text-left transition-all hover:scale-[1.02] shadow-xs group"
+            >
+              <div className="w-6 h-6 rounded-lg bg-purple-500/10 text-purple-600 flex items-center justify-center text-[11px] font-bold mb-1.5 group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                ✍️
+              </div>
+              <p className="text-[11px] font-semibold text-neutral-900 leading-tight">Review Copy</p>
+              <span className="text-[9px] text-neutral-500 block mt-0.5 font-mono">Headline</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleQuickPrompt('Checking the visual hierarchy and color contrast.')}
+              className="p-2 rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50/70 border border-emerald-100/80 hover:border-emerald-300 text-left transition-all hover:scale-[1.02] shadow-xs group"
+            >
+              <div className="w-6 h-6 rounded-lg bg-teal-500/10 text-teal-600 flex items-center justify-center text-[11px] font-bold mb-1.5 group-hover:bg-teal-600 group-hover:text-white transition-colors">
+                🎨
+              </div>
+              <p className="text-[11px] font-semibold text-neutral-900 leading-tight">Visual Polish</p>
+              <span className="text-[9px] text-neutral-500 block mt-0.5 font-mono">Palette</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleQuickPrompt('This iteration looks ready to ship! Approved on my end. ✅')}
+              className="p-2 rounded-xl bg-gradient-to-br from-amber-50 to-orange-50/70 border border-amber-100/80 hover:border-amber-300 text-left transition-all hover:scale-[1.02] shadow-xs group"
+            >
+              <div className="w-6 h-6 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center text-[11px] font-bold mb-1.5 group-hover:bg-amber-600 group-hover:text-white transition-colors">
+                ✅
+              </div>
+              <p className="text-[11px] font-semibold text-neutral-900 leading-tight">Approve Draft</p>
+              <span className="text-[9px] text-neutral-500 block mt-0.5 font-mono">Sign-off</span>
+            </button>
+          </div>
+        </div>
+
+        {/* ── Active Conversation Stream Between the Two Users ── */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-neutral-400 px-1">
+            <span className="truncate max-w-[170px]">
+              {activePost ? `Thread: ${activePost.title}` : 'Workspace Thread'}
+            </span>
+            <div className="flex items-center gap-2">
+              <span>{postMessages.length} updates</span>
+              {postMessages.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => clearChatMessages(currentPostId || undefined)}
+                  className="hover:text-red-600 font-medium lowercase px-1.5 py-0.5 rounded bg-neutral-100 hover:bg-red-50 border border-neutral-200/80 transition-colors"
+                  title="Purge messages in this thread"
+                >
+                  clear
+                </button>
+              )}
+            </div>
+          </div>
+
+          {postMessages.length === 0 ? (
+            <div className="p-5 text-center rounded-xl bg-neutral-50/60 border border-neutral-100 text-neutral-400">
+              <p className="text-xs font-semibold text-neutral-700 mb-1">
+                {activePost ? `Thread for "${activePost.title}"` : 'Workspace Thread'}
+              </p>
+              <p className="text-[11px] leading-relaxed text-neutral-500">
+                No messages yet for this creative. Start the review thread below!
+              </p>
+            </div>
+          ) : (
+            postMessages.map((msg) => {
+              const isMe = msg.senderUid === currentUser.uid;
+              const shortId = (msg.senderUid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '').slice(-4).toUpperCase() || '7F2A';
+              const displayName = isMe
+                ? 'You'
+                : (msg.senderName && msg.senderName !== 'Collaborator' && msg.senderName !== 'owner' && msg.senderName !== 'client')
+                  ? msg.senderName
+                  : `User #${shortId}`;
+
+              return (
+                <div
+                  key={msg.id}
+                  className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} space-y-1`}
+                >
+                  <div className="flex items-center gap-1.5 text-[10px] text-neutral-400 font-sans">
+                    <span className="font-semibold text-neutral-700">
+                      {displayName}
+                    </span>
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-neutral-100 text-neutral-600 font-mono border border-neutral-200/60">
+                      ID: #{shortId}
+                    </span>
+                    <span>• {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+
+                  <div
+                    className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-xs leading-relaxed shadow-xs ${
+                      isMe
+                        ? 'bg-neutral-900 text-white rounded-br-xs'
+                        : 'bg-neutral-100 text-neutral-800 rounded-bl-xs border border-neutral-200/80'
+                    }`}
+                  >
+                    <p className="whitespace-pre-wrap">{msg.text}</p>
+                  </div>
+                </div>
+              );
+            })
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+      </div>
+
+      {/* ── Bottom Floating Input Bar (Matching Image 1) ── */}
+      <div className="p-3 bg-white border-t border-neutral-100">
+        <form
+          onSubmit={handleSend}
+          className="relative bg-neutral-50/90 hover:bg-neutral-50 border border-neutral-200/90 rounded-2xl p-2.5 transition-all focus-within:border-neutral-400 focus-within:bg-white shadow-xs"
+        >
           <input
             type="text"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            placeholder={activeTab === 'ai' ? 'Ask CometChat AI for copy ideas...' : 'Type message to iterate...'}
-            className="w-full pl-3 pr-10 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-900 focus:bg-white transition-all"
+            placeholder="Type feedback or reply to partner..."
+            className="w-full bg-transparent text-xs text-neutral-900 placeholder:text-neutral-400 focus:outline-none px-1 pb-2 font-sans"
           />
-          <button
-            type="submit"
-            className="absolute right-1.5 p-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition-colors shadow-xs"
-          >
-            <Send className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </form>
+
+          <div className="flex items-center justify-between pt-1 border-t border-neutral-100">
+            <div className="flex items-center gap-1 text-neutral-500">
+              <button
+                type="button"
+                onClick={() => dispatch({ type: 'TOGGLE_MODAL', modal: 'isCreatePostOpen', value: true })}
+                title="Add Image Node"
+                className="w-7 h-7 rounded-lg hover:bg-neutral-200/60 flex items-center justify-center transition-colors"
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => activePost && togglePostHighlight(activePost.id)}
+                title={activePost?.isHighlighted ? 'Remove Aura Glow' : 'Highlight Post with Aura Glow'}
+                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                  activePost?.isHighlighted ? 'bg-purple-600 text-white shadow-2xs' : 'hover:bg-neutral-200/60 text-neutral-500'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                title="Voice review confirmation"
+                onClick={() =>
+                  setInputText((prev) =>
+                    prev.includes('🎙️ Voice review confirmed.')
+                      ? prev
+                      : prev
+                        ? `${prev} 🎙️ Voice review confirmed.`
+                        : '🎙️ Voice review confirmed.'
+                  )
+                }
+                className="w-7 h-7 rounded-lg hover:bg-neutral-200/60 flex items-center justify-center transition-colors"
+              >
+                <Mic className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <button
+              type="submit"
+              disabled={!inputText.trim() || isSending}
+              className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
+                inputText.trim() && !isSending
+                  ? 'bg-blue-500 hover:bg-blue-600 text-white shadow-md hover:scale-105 active:scale-95'
+                  : 'bg-neutral-200 text-neutral-400 cursor-not-allowed'
+              }`}
+            >
+              {isSending ? (
+                <span className="w-3 h-3 border-2 border-neutral-300 border-t-neutral-600 rounded-full animate-spin" />
+              ) : (
+                <ArrowUp className="w-4 h-4" />
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
     </aside>
   );
 }

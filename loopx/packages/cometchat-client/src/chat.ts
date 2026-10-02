@@ -180,8 +180,9 @@ export async function addAnnotationListener(
 ): Promise<() => void> {
   if (_isMockMode) {
     // In mock mode, subscribe to the BroadcastChannel
+    // @ts-ignore
     const { subscribeMockEvents } = await import('./mock');
-    const unsub = subscribeMockEvents((event) => {
+    const unsub = subscribeMockEvents((event: any) => {
       if (event.type === 'ANNOTATION_CREATED') {
         playAnnotationChime();
         callbacks.onAnnotationCreated(event.annotation);
@@ -263,21 +264,49 @@ export async function sendCometChatMessage(
   receiverId: string,
   text: string,
   receiverType: 'user' | 'group' = 'group',
+  metadata?: Record<string, any>,
 ): Promise<any> {
   if (_isMockMode) {
     console.info('[loopx] CometChat simulation mode: message logged locally.');
-    return { id: `mock_${Date.now()}`, text, receiverId };
+    return { id: `mock_${Date.now()}`, text, receiverId, metadata };
   }
 
   try {
     const sdk = await getSDK();
     const type = receiverType === 'group' ? sdk.RECEIVER_TYPE.GROUP : sdk.RECEIVER_TYPE.USER;
     const textMessage = new sdk.TextMessage(receiverId, text, type);
+    if (metadata) {
+      textMessage.setMetadata(metadata);
+    }
     const sentMsg = await sdk.sendMessage(textMessage);
     return sentMsg;
   } catch (err) {
     console.warn('[loopx] CometChat sendTextMessage warning:', err);
-    return { id: `msg_${Date.now()}`, text, receiverId };
+    return { id: `msg_${Date.now()}`, text, receiverId, metadata };
+  }
+}
+
+export async function fetchOnlineGroupMembers(groupId: string): Promise<{ uid: string; name: string; status: 'ONLINE' | 'OFFLINE' | 'AWAY' }[]> {
+  if (_isMockMode) return [];
+  try {
+    const sdk = await getSDK();
+    const groupMembersRequest = new sdk.GroupMembersRequestBuilder(groupId)
+      .setLimit(30)
+      .build();
+    const members = await groupMembersRequest.fetchNext();
+    if (!members) return [];
+    return members
+      .filter((m: any) => {
+        const rawStatus = (m.getStatus?.() || m.status || '').toLowerCase();
+        return rawStatus === 'online';
+      })
+      .map((m: any) => ({
+        uid: m.getUid?.() || m.uid,
+        name: m.getName?.() || m.name || 'Collaborator',
+        status: 'ONLINE' as const,
+      }));
+  } catch (err) {
+    return [];
   }
 }
 
@@ -323,6 +352,170 @@ export async function addCometChatMessageListener(
     return () => sdk.removeMessageListener(listenerId);
   } catch (err) {
     return () => {};
+  }
+}
+
+// ─── CometChat Group Management ──────────────────────────────────────────────
+
+/**
+ * Creates a CometChat group for a workspace/room.
+ * Returns the group object or null on failure.
+ */
+export async function createCometChatGroup(
+  groupId: string,
+  groupName: string,
+  groupType: 'public' | 'password' | 'private' = 'public',
+): Promise<any> {
+  if (_isMockMode) {
+    console.info('[loopx] Mock mode: group creation simulated for', groupId);
+    return { guid: groupId, name: groupName, type: groupType };
+  }
+
+  try {
+    const sdk = await getSDK();
+    const type =
+      groupType === 'password'
+        ? sdk.GROUP_TYPE.PASSWORD
+        : groupType === 'private'
+          ? sdk.GROUP_TYPE.PRIVATE
+          : sdk.GROUP_TYPE.PUBLIC;
+
+    const group = new sdk.Group(groupId, groupName, type);
+    const created = await sdk.createGroup(group);
+    console.info('[loopx] CometChat group created:', groupId);
+    return created;
+  } catch (err: any) {
+    // ERR_GROUP_ALREADY_EXISTS — that's fine, just fetch it
+    if (err?.code === 'ERR_GROUP_ALREADY_EXISTS' || err?.message?.includes('already exists')) {
+      console.info('[loopx] Group already exists, fetching:', groupId);
+      return getCometChatGroup(groupId);
+    }
+    console.warn('[loopx] CometChat createGroup warning:', err);
+    return null;
+  }
+}
+
+/**
+ * Fetches an existing CometChat group by GUID.
+ */
+export async function getCometChatGroup(groupId: string): Promise<any> {
+  if (_isMockMode) return { guid: groupId };
+
+  try {
+    const sdk = await getSDK();
+    return await sdk.getGroup(groupId);
+  } catch (err) {
+    console.warn('[loopx] CometChat getGroup warning:', err);
+    return null;
+  }
+}
+
+/**
+ * Joins a CometChat group. Handles "already joined" silently.
+ */
+export async function joinCometChatGroup(
+  groupId: string,
+  groupType: 'public' | 'password' | 'private' = 'public',
+  password?: string,
+): Promise<boolean> {
+  if (_isMockMode) return true;
+
+  try {
+    const sdk = await getSDK();
+    const type =
+      groupType === 'password'
+        ? sdk.GROUP_TYPE.PASSWORD
+        : groupType === 'private'
+          ? sdk.GROUP_TYPE.PRIVATE
+          : sdk.GROUP_TYPE.PUBLIC;
+
+    await sdk.joinGroup(groupId, type, password || '');
+    console.info('[loopx] Joined CometChat group:', groupId);
+    return true;
+  } catch (err: any) {
+    // ERR_ALREADY_JOINED — silently succeed
+    if (err?.code === 'ERR_ALREADY_JOINED' || err?.message?.includes('already joined')) {
+      return true;
+    }
+    console.warn('[loopx] CometChat joinGroup warning:', err);
+    return false;
+  }
+}
+
+/**
+ * Creates a group if it doesn't exist, then joins the current user to it.
+ */
+export async function getOrCreateGroup(
+  groupId: string,
+  groupName: string,
+): Promise<any> {
+  if (_isMockMode) {
+    return { guid: groupId, name: groupName };
+  }
+
+  // Try to create (will return existing if already created)
+  const group = await createCometChatGroup(groupId, groupName, 'public');
+
+  // Join the group (will silently succeed if already a member)
+  await joinCometChatGroup(groupId, 'public');
+
+  return group;
+}
+
+// ─── CometChat User Management ──────────────────────────────────────────────
+
+/**
+ * Creates a CometChat user if they don't exist, then logs them in.
+ * Returns { uid, name } on success.
+ */
+export async function createOrGetUser(
+  uid: string,
+  name: string,
+): Promise<{ uid: string; name: string }> {
+  if (_isMockMode) {
+    return { uid, name };
+  }
+
+  const config = getCometChatConfig();
+  if (!config) throw new Error('CometChat config unavailable');
+
+  const sdk = await getSDK();
+
+  // Try to create user via REST API
+  try {
+    const user = new sdk.User(uid);
+    user.setName(name);
+    await sdk.createUser(user, config.authKey);
+    console.info('[loopx] CometChat user created:', uid);
+  } catch (err: any) {
+    // User already exists — that's fine
+    if (!err?.message?.includes('already exists') && err?.code !== 'ERR_UID_ALREADY_EXISTS') {
+      console.warn('[loopx] CometChat createUser warning:', err);
+    }
+  }
+
+  // Now login
+  return loginUser(uid);
+}
+
+/**
+ * Gets the currently logged-in CometChat user, or null if not logged in.
+ */
+export async function getLoggedInUser(): Promise<{ uid: string; name: string } | null> {
+  if (_isMockMode) {
+    const mockUser = MOCK_USERS[0]!;
+    return { uid: mockUser.uid, name: mockUser.name };
+  }
+
+  try {
+    const sdk = await getSDK();
+    const user = await sdk.getLoggedinUser();
+    if (user) {
+      return { uid: user.getUid(), name: user.getName() };
+    }
+    return null;
+  } catch {
+    return null;
   }
 }
 

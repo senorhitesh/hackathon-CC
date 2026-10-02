@@ -9,7 +9,7 @@ import {
   PhoneOff,
   Volume2,
   Users,
-} from 'lucide-react';
+} from './icons/Hugeicons';
 import type { HuddleParticipant } from '@repo/types';
 import { useAppContext } from '../context/AppContext';
 

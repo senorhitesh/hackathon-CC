@@ -1,6 +1,8 @@
 // ─── CometChat SDK Configuration ───────────────────────────────────────────────
 // Reads from NEXT_PUBLIC_ env vars (works in both Next.js server/client contexts)
 
+declare const process: { env: Record<string, string | undefined> };
+
 export interface CometChatConfig {
   appId: string;
   region: string;

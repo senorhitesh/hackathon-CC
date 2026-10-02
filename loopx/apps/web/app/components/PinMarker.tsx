@@ -3,7 +3,7 @@
 import React from 'react';
 import type { PinAnnotation } from '@repo/types';
 import { useAppContext } from '../context/AppContext';
-import { CheckCircle2, Circle } from 'lucide-react';
+import { CheckCircle2, Circle } from './icons/Hugeicons';
 
 interface PinMarkerProps {
   annotation: PinAnnotation;

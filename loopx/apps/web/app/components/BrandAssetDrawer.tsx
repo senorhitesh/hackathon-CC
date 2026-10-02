@@ -10,7 +10,7 @@ import {
   Layers,
   Plus,
   Upload,
-} from 'lucide-react';
+} from './icons/Hugeicons';
 import type { CanvasElement } from '@repo/types';
 import { useAppContext } from '../context/AppContext';
 import { PLATFORM_PRESETS } from '@repo/types';

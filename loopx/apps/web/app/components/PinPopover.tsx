@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Send, MessageSquare } from 'lucide-react';
+import { X, Send, MessageSquare } from './icons/Hugeicons';
 import type { PinAnnotation } from '@repo/types';
 
 interface PinPopoverProps {

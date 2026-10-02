@@ -1,18 +1,39 @@
 import type { Metadata } from 'next';
 import localFont from 'next/font/local';
+import { Geist, Geist_Mono, DM_Serif_Display } from 'next/font/google';
 import './globals.css';
 import { AppProvider } from './context/AppContext';
 
-const geist = localFont({
-  src: './fonts/GeistVF.woff',
-  variable: '--font-geist',
-  weight: '100 900',
+const dmSans = localFont({
+  src: [
+    {
+      path: '../fonts/DM_Sans/DMSans-VariableFont_opsz,wght.ttf',
+      style: 'normal',
+    },
+    {
+      path: '../fonts/DM_Sans/DMSans-Italic-VariableFont_opsz,wght.ttf',
+      style: 'italic',
+    },
+  ],
+  variable: '--font-dm-sans',
+  display: 'swap',
 });
 
-const geistMono = localFont({
-  src: './fonts/GeistMonoVF.woff',
+const dmSerif = DM_Serif_Display({
+  weight: '400',
+  subsets: ['latin'],
+  variable: '--font-dm-serif',
+  display: 'swap',
+});
+
+const geistSans = Geist({
+  variable: '--font-geist-sans',
+  subsets: ['latin'],
+});
+
+const geistMono = Geist_Mono({
   variable: '--font-geist-mono',
-  weight: '100 900',
+  subsets: ['latin'],
 });
 
 export const metadata: Metadata = {
@@ -32,8 +53,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geist.variable} ${geistMono.variable} dark`}>
-      <body className="bg-canvas-bg text-canvas-fg antialiased">
+    <html lang="en" className={`${dmSans.variable} ${dmSerif.variable} ${geistSans.variable} ${geistMono.variable}`}>
+      <body className="bg-white text-neutral-900 antialiased font-sans">
         <AppProvider>{children}</AppProvider>
       </body>
     </html>

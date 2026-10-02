@@ -37,8 +37,9 @@ module.exports = {
         },
       },
       fontFamily: {
-        sans: ['GeistVF', 'system-ui', '-apple-system', 'sans-serif'],
-        mono: ['GeistMonoVF', 'monospace'],
+        sans: ['var(--font-dm-sans)', 'var(--font-geist-sans)', 'system-ui', '-apple-system', 'sans-serif'],
+        serif: ['var(--font-dm-serif)', 'Georgia', 'serif'],
+        mono: ['var(--font-geist-mono)', 'monospace'],
       },
       animation: {
         'pin-pulse': 'pin-pulse 2s ease-in-out infinite',

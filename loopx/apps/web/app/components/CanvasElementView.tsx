@@ -3,7 +3,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 import type { CanvasElement } from '@repo/types';
 import { useAppContext } from '../context/AppContext';
-import { Trash2, Lock, Unlock } from 'lucide-react';
+import { Trash2, Lock, Unlock } from './icons/Hugeicons';
 
 interface CanvasElementViewProps {
   element: CanvasElement;

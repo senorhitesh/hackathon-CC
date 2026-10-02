@@ -18,6 +18,15 @@ export {
   sendCometChatMessage,
   fetchCometChatMessageHistory,
   addCometChatMessageListener,
+  // Group Management
+  createCometChatGroup,
+  getCometChatGroup,
+  joinCometChatGroup,
+  getOrCreateGroup,
+  fetchOnlineGroupMembers,
+  // User Management
+  createOrGetUser,
+  getLoggedInUser,
 } from './chat';
 
 export type { AnnotationListenerCallbacks, PresenceCallbacks } from './chat';

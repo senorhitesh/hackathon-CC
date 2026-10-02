@@ -154,7 +154,7 @@ function getRandomColor(id: string) {
   return CURSOR_COLORS[Math.abs(hash) % CURSOR_COLORS.length];
 }
 
-const initialShortId = Math.random().toString(36).substring(2, 6).toUpperCase();
+const initialShortId = '7F2A';
 
 const initialState: AppState = {
   roomId: DEFAULT_ROOM_ID,
@@ -779,18 +779,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     cursorThrottleRef.current = now;
 
     if (channelRef.current) {
-      channelRef.current.send({
-        type: 'broadcast',
-        event: 'cursor_move',
-        payload: {
+      try {
+        channelRef.current.postMessage({
+          type: 'cursor_move',
           uid: state.currentUser.uid,
           name: state.currentUser.name,
           role: state.currentUser.role,
           color: getRandomColor(state.currentUser.uid),
           x,
           y,
-        },
-      });
+        });
+      } catch (_) {}
     }
   }, [state.currentUser.uid, state.currentUser.name, state.currentUser.role]);
 

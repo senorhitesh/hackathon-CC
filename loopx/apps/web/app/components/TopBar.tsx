@@ -258,6 +258,7 @@ export function TopBar() {
             onClick={() => setUserMenuOpen(!userMenuOpen)}
             className="flex items-center gap-1.5 p-1 rounded-full hover:bg-neutral-100 transition-colors border border-transparent hover:border-neutral-200"
             title={currentUser.name}
+            suppressHydrationWarning
           >
             {currentUser.avatar ? (
               <img

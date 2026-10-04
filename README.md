@@ -1,10 +1,11 @@
 # loopx — Real-Time Collaborative Creative Review & Ad Proofing Canvas
 
 > **Built for the CometChat "Zero to Chat" Hackathon (Sept 24 – Oct 7, 2026)**  
-> *Transforming ad creative approvals with interactive visual canvases, threaded discussions, live voice huddles, and real-time multiplayer presence.*
+> *Transforming ad creative approvals with interactive visual canvases, threaded discussions, live voice huddles, audio voice memos, AI ad compliance audits, A/B visual split testing, and real-time multiplayer presence.*
 
 [![CometChat MCP Connected](https://img.shields.io/badge/CometChat-MCP%20Connected-4f46e5?style=for-the-badge&logo=cometchat&logoColor=white)](https://mcp.cometchat.com/mcp?ref=z2c)
-[![Next.js 14](https://img.shields.io/badge/Next.js-14%20App%20Router-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
+[![Next.js 16](https://img.shields.io/badge/Next.js-16%20Turbopack-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
+[![React 19](https://img.shields.io/badge/React-19-61dafb?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178c6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Turborepo](https://img.shields.io/badge/Turborepo-Monorepo-ef4444?style=for-the-badge&logo=turborepo&logoColor=white)](https://turbo.build/)
 
@@ -82,7 +83,11 @@ The workspace includes the official CometChat MCP (Model Context Protocol) and s
 │  ├── 💬 Real-Time Chat & Threaded Reviews (@repo/cometchat) │
 │  ├── 📁 Cloud S3 Media Attachments & Direct Downloads       │
 │  ├── 🎙️ Live Voice-Only Huddle & Audio Spectrum Meters     │
-│  ├── 👥 Real-Time Presence & Multiplayer Cursors            │
+│  ├── 🗣️ Async Voice Memos with Live Waveform Visualizer     │
+│  ├── ⚖️ A/B Interactive Split Slider & Team Polling         │
+│  ├── 🤖 Instant AI Creative Compliance & Hook Scoring       │
+│  ├── 📌 Pin-Point Visual Feedback & Resolution Flow         │
+│  ├── 👥 Real-Time Presence, User Listeners & Multiplayer    │
 │  └── 🏷️ Dynamic Name Convention & Custom User Renaming      │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -98,26 +103,35 @@ The agent leveraged the CometChat MCP connector and skills pack (`@cometchat/ski
 
 When recording the submission demo video (under 90 seconds):
 1. **Show the Connector**: Display the active CometChat MCP connector in your editor's MCP server panel (`cometchat` connected to `https://mcp.cometchat.com/mcp?ref=z2c`) or the terminal showing `npx @cometchat/skills`.
-2. **Show the Working Build**: Open `http://localhost:3000/app` and showcase real-time creative collaboration, chat, media upload, and voice huddle.
+2. **Show the Working Build**: Open `http://localhost:3000/app` and showcase real-time creative collaboration, chat, media upload, A/B testing, AI audit, voice memos, and voice huddle.
 
 ---
 
 ## 🎨 What is loopx?
 
-`loopx` is an **all-in-one real-time visual collaboration board** designed specifically for marketing teams, art directors, and clients. Traditional ad review workflows are fragmented across Slack, Google Drive, email threads, and Figma. `loopx` unifies visual creative review, real-time threaded chat, live voice reviews, and ad format previews on a single infinite canvas.
+`loopx` is an **all-in-one real-time visual collaboration board** designed specifically for marketing teams, art directors, copywriters, and clients. Traditional ad review workflows are fragmented across Slack, Google Drive, email threads, and Figma. `loopx` unifies visual creative review, real-time threaded chat, live voice reviews, asynchronous voice notes, AI audits, and ad format previews on a single infinite canvas.
 
 ### Key Features
 
 - **🎯 Interactive Infinite Artboard**: Pan, zoom, drag posts, and connect ad variations with dynamic SVG Bezier wires.
 - **💬 Creative Thread Chat**: Each ad post has its own unique CometChat conversation thread for feedback on headlines, copy, visual hierarchy, and approvals.
+- **🗣️ Async Voice Memos & Waveforms**: Record up to 30-second audio design critiques with real-time audio waveform visualizers, built directly into the CometChat thread for rapid verbal feedback.
+- **⚖️ A/B Creative Compare & Live Polling**:
+  - Compare two ad variations side-by-side or using an interactive before/after split slider.
+  - Live team voting with percentage bars and 1-click broadcast of winning variants to CometChat.
+- **🤖 AI Creative Compliance & Hook Audit**:
+  - Deterministic ad copy analyzer evaluating hook quality, CTA punch, and character constraints (e.g., Instagram 2,200 limit).
+  - Generates high-converting alternate headline suggestions and shares audit summaries directly to the chat thread with a single click.
+- **📌 Precision Pin-Point Annotations**:
+  - Click anywhere on a creative asset to drop exact visual feedback pins (normalized coordinate tracking).
+  - Mark feedback as Open or Resolved with live author badges.
 - **📁 CometChat Cloud Media Storage**: Upload images and videos directly to CometChat cloud storage with full preview chips, download buttons, and cross-session persistence.
 - **🎙️ Live Voice-Only Huddles**: Hop into instant voice huddles with your team right from the canvas. Features speaking wavebars, mute controls, and multi-peer audio streaming.
-- **👥 Excalidraw-Style Multiplayer Cursors**: See collaborators' cursors moving in real-time across the canvas with custom color badges and name tags.
+- **👥 Excalidraw-Style Multiplayer Cursors & Presence**: See collaborators' cursors moving in real-time across the canvas with custom color badges and name tags, synchronized with CometChat User Presence listeners.
 - **🏷️ Dynamic Name Convention & Custom Renaming**:
   - Set your own custom display name and role (e.g. `Sarah Connor · Art Director`, `Alex · Copywriter`).
   - **Give custom names/aliases to particular collaborators** (e.g. rename `User #7A2B` to `Client Reviewer`). Changes instantly reflect across cursors, chat, and presence!
 - **📱 Platform Aspect Ratio Simulator**: Switch between Instagram 1:1 Square, 9:16 Reels/Stories, 16:9 X Banners, and LinkedIn Feed formats with live canvas element scaling.
-- **📌 Pin Annotations**: Place precision pin markers on creatives with feedback threads and resolution tracking.
 
 ---
 
@@ -131,10 +145,20 @@ loopx/
 ├── .vscode/
 │   └── settings.json             # VS Code CometChat connector settings
 ├── apps/
-│   └── web/                      # Next.js 14 Web Application
+│   └── web/                      # Next.js 16 Web Application (Turbopack)
 │       ├── app/
 │       │   ├── app/              # Main collaborative canvas workspace
-│       │   ├── components/       # UI components (CanvasWorkspace, TopBar, PostChatPanel, VoiceHuddleBar)
+│       │   ├── components/       # Rich UI & collaboration components
+│       │   │   ├── ABCompareModal.tsx       # A/B visual split slider & team voting
+│       │   │   ├── AIAuditPanel.tsx         # Creative compliance & hook scoring
+│       │   │   ├── CanvasWorkspace.tsx      # Pan/zoom infinite artboard & Bezier wires
+│       │   │   ├── CreatePostModal.tsx      # Ad creative builder & format presets
+│       │   │   ├── LeftSidebar.tsx          # Creative library & session controls
+│       │   │   ├── PinAnnotationOverlay.tsx # Precise visual pin markers & resolution
+│       │   │   ├── PostChatPanel.tsx        # CometChat thread panel & media preview
+│       │   │   ├── PresenceBar.tsx          # Real-time online team avatars & call triggers
+│       │   │   ├── TopBar.tsx               # Workspace title, rename modal & format toggle
+│       │   │   └── VoiceMemoRecorder.tsx    # Audio memo recorder with live waveform
 │       │   ├── context/          # AppContext (collaborative state, sync, naming conventions)
 │       │   ├── hooks/            # useCometChat, useCall, useCanvasGestures
 │       │   └── providers/        # CometChatProvider, CometChatCallsProvider
@@ -164,7 +188,7 @@ Clone the repository and install dependencies:
 
 ```bash
 git clone https://github.com/senorhitesh/hackathon-CC.git
-cd loopx
+cd hackathon-CC/loopx
 bun install
 ```
 
@@ -178,7 +202,7 @@ NEXT_PUBLIC_COMETCHAT_AUTH_KEY=your_cometchat_auth_key
 NEXT_PUBLIC_COMETCHAT_REGION=us
 ```
 
-*(Note: If environment variables are omitted, `loopx` automatically activates its verified offline local engine so all UI features, canvas sync, audio huddle, and chat threads remain fully interactive!)*
+*(Note: If environment variables are omitted, `loopx` automatically activates its verified offline local engine so all UI features, canvas sync, audio huddle, voice memos, and chat threads remain fully interactive!)*
 
 ### 4. Run Development Server
 
@@ -188,17 +212,25 @@ bun run dev
 
 Open [http://localhost:3000](http://localhost:3000) in your browser. Open multiple tabs or windows to experience real-time multiplayer collaboration, cursor tracking, chat threads, and voice huddle!
 
+### 5. Production Build
+
+To build the monorepo for production:
+
+```bash
+bun run build
+```
+
 ---
 
 ## 🏆 Hackathon Submission Checklist
 
 | Criterion | Status | Details |
 |---|---|---|
-| **Project Runs** | ✅ Valid | Working interactive collaborative canvas with chat, media, calls, and presence |
+| **Project Runs** | ✅ Valid | Working interactive collaborative canvas with chat, media, calls, voice memos, A/B voting, AI audit, and presence |
 | **Connector Visible in Editor/Agent** | ✅ Valid | `.cursor/mcp.json`, `mcp_config.json`, `.vscode/settings.json` pointing to `https://mcp.cometchat.com/mcp?ref=z2c` |
 | **Demo Video Under 90s** | ✅ Prepared | Demo walkthrough showing connector in editor and live app in action |
-| **CometChat Chat Integration** | ✅ Complete | CometChat Chat SDK v4 for real-time messaging and cloud media upload |
-| **CometChat Calls Integration** | ✅ Complete | CometChat Calls SDK for voice-only huddles with audio meters |
+| **CometChat Chat Integration** | ✅ Complete | CometChat Chat SDK v4 for real-time messaging, audio voice memos, and cloud media upload |
+| **CometChat Calls Integration** | ✅ Complete | CometChat Calls SDK for voice-only huddles with live audio meters |
 
 ---
 

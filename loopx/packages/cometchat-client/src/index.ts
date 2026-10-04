@@ -19,6 +19,10 @@ export {
   sendCometChatMediaMessage,
   fetchCometChatMessageHistory,
   addCometChatMessageListener,
+  // Real-time Collaboration & Presence Sync
+  sendCollabSyncMessage,
+  addCollabSyncListener,
+  COLLAB_SYNC_CUSTOM_TYPE,
   // Group Management
   createCometChatGroup,
   getCometChatGroup,

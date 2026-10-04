@@ -36,8 +36,11 @@ export function useCometChat() {
         if (msgType === 'text' || msgType === 'image' || msgType === 'video' || msgType === 'file' || msgType === 'media') {
           const senderUid = msg.getSender?.()?.getUid?.() || msg.sender?.uid || msg.senderUid || '';
           const rawName = msg.getSender?.()?.getName?.() || msg.sender?.name || msg.senderName;
-          const shortId = (senderUid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '').slice(-4).toUpperCase() || '7F2A';
-          const senderName = (rawName && rawName !== 'Collaborator' && rawName !== 'owner' && rawName !== 'client')
+          const cleanSender = (senderUid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '');
+          const shortId = cleanSender && !cleanSender.toLowerCase().includes('7f2a') && !cleanSender.toLowerCase().includes('init')
+            ? cleanSender.slice(-4).toUpperCase()
+            : Math.random().toString(36).substring(2, 6).toUpperCase();
+          const senderName = (rawName && rawName !== 'Collaborator' && rawName !== 'owner' && rawName !== 'client' && !rawName.toUpperCase().includes('7F2A'))
             ? rawName
             : `User #${shortId}`;
           const id = msg.getId?.()?.toString() || msg.id?.toString() || `cc_${Date.now()}`;
@@ -117,6 +120,8 @@ export function useCometChat() {
         addCometChatMessageListener,
         addAnnotationListener,
         addPresenceListener,
+        sendCollabSyncMessage,
+        addCollabSyncListener,
         isMockMode,
         getMockCurrentUser,
         initMockBroadcast,
@@ -136,9 +141,15 @@ export function useCometChat() {
         const mockUser = getMockCurrentUser();
         loggedInUser = { uid: mockUser.uid, name: mockUser.name };
       } else {
-        // Use current user from AppContext (set during login flow)
-        const { uid, name } = state.currentUser;
-        loggedInUser = await createOrGetUser(uid, name || 'Collaborator');
+        // Use current user from AppContext or generate fresh tab user
+        let userUid = state.currentUser.uid;
+        let userName = state.currentUser.name;
+        if (!userUid || userUid === 'usr_init' || userUid.toLowerCase().includes('7f2a') || userName?.toUpperCase().includes('7F2A')) {
+          const freshShortId = Math.random().toString(36).substring(2, 6).toUpperCase();
+          userUid = `usr_${freshShortId.toLowerCase()}`;
+          userName = `User #${freshShortId}`;
+        }
+        loggedInUser = await createOrGetUser(userUid, userName);
       }
 
       // Update state with authenticated user
@@ -163,17 +174,9 @@ export function useCometChat() {
       const group = await getOrCreateGroup(roomId, state.sessionName || 'Creative Workspace');
       console.info('[loopx] CometChat group ready:', roomId, group ? '✓' : '✗');
 
-      // Fetch online group members so collaborators are immediately detected
-      if (!isMockMode()) {
-        try {
-          const members = await fetchOnlineGroupMembers(roomId);
-          for (const m of members) {
-            if (m.uid !== loggedInUser.uid) {
-              dispatch({ type: 'USER_JOINED', user: m });
-            }
-          }
-        } catch (_) {}
-      }
+      // Note: CometChat group members are historical participants; real-time presence
+      // is managed dynamically via CometChat UserListener (addPresenceListener) and BroadcastChannel
+      // to ensure closed/inactive tabs are not shown as active collaborators.
 
       // ── Step 5: Fetch Message History ──────────────────────────────────────
       if (!isMockMode()) {
@@ -245,14 +248,165 @@ export function useCometChat() {
       } else {
         const cleanupPresence = await addPresenceListener(`presence_${roomId}`, {
           onUserOnline: (uid, name) => {
+            if (uid.toLowerCase().includes('7f2a') || uid === 'usr_init' || name?.toUpperCase().includes('7F2A')) return;
             dispatch({ type: 'USER_JOINED', user: { uid, name, status: 'ONLINE' } });
+            dispatch({
+              type: 'UPDATE_COLLABORATOR_CURSOR',
+              cursor: {
+                uid,
+                name: (name && name !== 'Collaborator' && name !== 'owner') ? name : `User #${uid.slice(-4).toUpperCase()}`,
+                role: 'client',
+                color: '#2563eb',
+                x: 0,
+                y: 0,
+                lastSeen: Date.now(),
+              },
+            });
           },
           onUserOffline: (uid) => {
             dispatch({ type: 'USER_LEFT', uid });
+            dispatch({ type: 'REMOVE_COLLABORATOR', uid });
           },
         });
         cleanupRef.current.push(cleanupPresence);
       }
+
+      // ── Step 9: CometChat Real-Time Presence & Canvas Collaboration Bridge ─
+      // Connects normal tabs, incognito tabs, and remote collaborators across the internet
+      const collabListenerId = `loopx_collab_${roomId}`;
+      const cleanupCollab = await addCollabSyncListener(collabListenerId, (payload: any) => {
+        if (!payload) return;
+        const myUid = loggedInUser.uid;
+        const sender = payload._senderUid || payload.user?.uid || payload.uid || payload.senderUid;
+        if (sender === myUid) return;
+
+        // Discard any legacy 7f2a spam
+        if (sender?.toLowerCase().includes('7f2a') || payload.user?.name?.toUpperCase().includes('7F2A')) return;
+
+        if (payload.type === 'cursor_move') {
+          dispatch({
+            type: 'UPDATE_COLLABORATOR_CURSOR',
+            cursor: {
+              uid: payload.uid,
+              name: payload.name || 'Collaborator',
+              role: payload.role || 'client',
+              color: payload.color || '#2563eb',
+              x: payload.x,
+              y: payload.y,
+              lastSeen: Date.now(),
+            },
+          });
+          dispatch({
+            type: 'USER_JOINED',
+            user: {
+              uid: payload.uid,
+              name: payload.name || 'Collaborator',
+              status: 'ONLINE',
+            },
+          });
+        } else if (payload.type === 'presence_join' || payload.type === 'presence_ping') {
+          if (payload.user?.uid) {
+            dispatch({ type: 'USER_JOINED', user: payload.user });
+            dispatch({
+              type: 'UPDATE_COLLABORATOR_CURSOR',
+              cursor: {
+                uid: payload.user.uid,
+                name: payload.user.name || 'Collaborator',
+                role: payload.user.role || 'client',
+                color: payload.user.color || '#2563eb',
+                x: 0,
+                y: 0,
+                lastSeen: Date.now(),
+              },
+            });
+          }
+          // Reply with our presence over CometChat so the joining incognito/normal tab immediately registers us!
+          sendCollabSyncMessage(roomId, {
+            type: 'presence_ack',
+            user: {
+              uid: loggedInUser.uid,
+              name: loggedInUser.name,
+              role: state.currentUser.role,
+              status: 'ONLINE',
+            },
+          }).catch(() => {});
+        } else if (payload.type === 'presence_ack' || payload.type === 'presence_heartbeat') {
+          if (payload.user?.uid) {
+            dispatch({ type: 'USER_JOINED', user: payload.user });
+            dispatch({
+              type: 'UPDATE_COLLABORATOR_CURSOR',
+              cursor: {
+                uid: payload.user.uid,
+                name: payload.user.name || 'Collaborator',
+                role: payload.user.role || 'client',
+                color: payload.user.color || '#2563eb',
+                x: 0,
+                y: 0,
+                lastSeen: Date.now(),
+              },
+            });
+          }
+        } else if (payload.type === 'presence_leave') {
+          if (payload.uid) {
+            dispatch({ type: 'USER_LEFT', uid: payload.uid });
+            dispatch({ type: 'REMOVE_COLLABORATOR', uid: payload.uid });
+          }
+        } else if (payload.type === 'canvas_sync') {
+          switch (payload.event) {
+            case 'POST_MOVED':
+              dispatch({
+                type: 'UPDATE_POST_POSITION',
+                postId: payload.postId,
+                x: payload.x,
+                y: payload.y,
+              });
+              break;
+            case 'POST_CREATED':
+              dispatch({
+                type: 'ADD_POST',
+                post: payload.post,
+              });
+              break;
+            case 'POST_STATUS':
+              dispatch({
+                type: 'UPDATE_POST_STATUS',
+                postId: payload.postId,
+                status: payload.status,
+              });
+              break;
+            case 'POST_HIGHLIGHTED':
+              dispatch({
+                type: 'TOGGLE_POST_HIGHLIGHT',
+                postId: payload.postId,
+              });
+              break;
+            case 'POST_DELETED':
+              dispatch({
+                type: 'REMOVE_POST',
+                postId: payload.postId,
+              });
+              break;
+          }
+        }
+      });
+      cleanupRef.current.push(cleanupCollab);
+
+      // Immediately announce presence to all tabs/peers (including incognito) via CometChat
+      sendCollabSyncMessage(roomId, {
+        type: 'presence_join',
+        user: {
+          uid: loggedInUser.uid,
+          name: loggedInUser.name,
+          role: state.currentUser.role,
+          status: 'ONLINE',
+        },
+      }).catch(() => {});
+
+      // Send ping so any already open tabs immediately report back via CometChat
+      sendCollabSyncMessage(roomId, {
+        type: 'presence_ping',
+        uid: loggedInUser.uid,
+      }).catch(() => {});
 
       console.info('[loopx] All CometChat listeners registered. Ready for real-time collaboration.');
     }
@@ -273,7 +427,7 @@ export function useCometChat() {
     async (
       text: string,
       targetPostId?: string,
-      media?: { file?: File; url: string; name?: string; type?: 'image' | 'video' | 'file' }
+      media?: { file?: File | Blob; url: string; name?: string; type?: 'image' | 'video' | 'file' | 'audio'; audioDuration?: number }
     ) => {
       if (!text.trim() && !media?.url) return;
 
@@ -281,8 +435,12 @@ export function useCometChat() {
       const roomId = currentRoomRef.current;
       const effectivePostId = targetPostId || state.activePostId || roomId;
 
-      const shortId = (state.currentUser.uid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '').slice(-4).toUpperCase() || '7F2A';
-      const cleanSenderName = (state.currentUser.name && state.currentUser.name !== 'Collaborator' && state.currentUser.name !== 'owner')
+      const rawUid = state.currentUser.uid || '';
+      const cleanUid = rawUid.replace(/^(user_|usr_|collab_|client_|owner_)/i, '');
+      const shortId = cleanUid && !cleanUid.toLowerCase().includes('7f2a') && !cleanUid.toLowerCase().includes('init')
+        ? cleanUid.slice(-4).toUpperCase()
+        : 'USER';
+      const cleanSenderName = (state.currentUser.name && state.currentUser.name !== 'Collaborator' && state.currentUser.name !== 'owner' && !state.currentUser.name.toUpperCase().includes('7F2A'))
         ? state.currentUser.name
         : `User #${shortId}`;
 
@@ -298,6 +456,7 @@ export function useCometChat() {
         mediaUrl: media?.url,
         mediaName: media?.name,
         mediaType: media?.type,
+        audioDuration: media?.audioDuration,
       };
 
       dispatch({ type: 'ADD_CHAT_MESSAGE', message: localMsg });
@@ -327,7 +486,7 @@ export function useCometChat() {
               text.trim(),
               {
                 postId: effectivePostId,
-                mediaName: media.name || media.file.name,
+                mediaName: media.name || ('name' in media.file ? (media.file as File).name : 'media-attachment'),
                 mediaType: media.type,
               },
             );

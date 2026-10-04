@@ -108,13 +108,13 @@ export function CreatePostModal() {
 
         <div className="mb-5">
           <span className="text-[10px] font-mono uppercase tracking-wider text-neutral-500 font-semibold">
-            Node Configuration
+            Creative Setup
           </span>
           <h2 className="text-base font-semibold text-neutral-900 mt-0.5">
-            Create Creative Node
+            New Ad Creative
           </h2>
           <p className="text-xs text-neutral-500 mt-0.5">
-            Add a creative ad post to collaborate with live feedback and CometChat nodes
+            Add a creative ad asset to collaborate with live feedback and review threads
           </p>
         </div>
 
@@ -264,7 +264,7 @@ export function CreatePostModal() {
               type="submit"
               className="py-2.5 px-4 rounded-xl bg-black hover:bg-neutral-800 text-white text-xs font-semibold transition-all shadow-xs flex items-center gap-1.5 active:scale-95"
             >
-              Add Node to Canvas
+              Add Creative to Canvas
             </button>
           </div>
         </form>

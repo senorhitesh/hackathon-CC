@@ -31,10 +31,16 @@ import {
   Camera,
   LayoutGrid,
   Sparkles,
+  Hand,
+  FullScreen,
 } from './icons/Hugeicons';
 import type { BoardPost } from '@repo/types';
 import type { ChatMessage } from '../context/AppContext';
 import { useCometChatContext } from '../app/page';
+import { PinAnnotationOverlay } from './PinAnnotationOverlay';
+import { AIAuditPanel } from './AIAuditPanel';
+import { ABCompareModal } from './ABCompareModal';
+import { VoiceMemoPlayer } from './VoiceMemoRecorder';
 
 export function CanvasWorkspace() {
   const {
@@ -56,6 +62,7 @@ export function CanvasWorkspace() {
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [isSpacePressed, setIsSpacePressed] = useState(false);
+  const [isHandMode, setIsHandMode] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
 
   // Dragging Node State
@@ -69,11 +76,22 @@ export function CanvasWorkspace() {
   // Chat Node inputs
   const [inputTexts, setInputTexts] = useState<Record<string, string>>({});
 
+  // ── Feature 1: Per-post pin annotation mode ───────────────────────────────
+  const [activePinPostId, setActivePinPostId] = useState<string | null>(null);
+
+  // ── Feature 3: AI Audit panel ─────────────────────────────────────────────
+  const [auditPostId, setAuditPostId] = useState<string | null>(null);
+
+  // ── Feature 4: A/B Compare modal ─────────────────────────────────────────
+  const [abCompare, setAbCompare] = useState<{ postA: BoardPost; postB: BoardPost } | null>(null);
+  const [abSelectMode, setAbSelectMode] = useState<{ firstPostId: string } | null>(null);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const activePost = posts.find((p) => p.id === activePostId) ?? posts[0];
 
   // Auto-connect all posts to CometChat iteration nodes on load and sync
   useEffect(() => {
+
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(`loopx_open_nodes_${state.roomId}`);
       if (saved) {
@@ -181,6 +199,13 @@ export function CanvasWorkspace() {
           togglePostHighlight(activePost.id);
         }
       }
+
+      // Hand tool shortcuts: P toggles hand mode, Escape or V resets to selection mode
+      if (e.key === 'Escape' || e.key.toLowerCase() === 'v') {
+        setIsHandMode(false);
+      } else if (e.key.toLowerCase() === 'p') {
+        setIsHandMode((prev) => !prev);
+      }
     }
 
     function handleKeyUp(e: KeyboardEvent) {
@@ -223,7 +248,7 @@ export function CanvasWorkspace() {
 
   // Pan Canvas Events
   function handleCanvasMouseDown(e: React.MouseEvent<HTMLDivElement>) {
-    if (e.button === 1 || isSpacePressed || (e.target as HTMLElement).classList.contains('dot-canvas')) {
+    if (e.button === 1 || isSpacePressed || isHandMode || (e.target as HTMLElement).classList.contains('dot-canvas')) {
       setIsPanning(true);
       setPanStart({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
     }
@@ -280,7 +305,7 @@ export function CanvasWorkspace() {
   }
 
   function startDrag(e: React.MouseEvent<HTMLDivElement>, id: string, type: 'post' | 'chat') {
-    if (isSpacePressed) return;
+    if (isSpacePressed || isHandMode) return;
     e.stopPropagation();
 
     if (type === 'post') {
@@ -393,7 +418,7 @@ export function CanvasWorkspace() {
         return (
           <div className="mb-2 flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200/80 text-blue-800 text-[11px] font-medium shadow-xs w-fit">
             <span className="w-2 h-2 rounded-full bg-blue-500" />
-            <span>✦ Creative Node</span>
+            <span>✦ Creative Asset</span>
           </div>
         );
     }
@@ -421,7 +446,7 @@ export function CanvasWorkspace() {
             </div>
 
             <p className="text-xs text-neutral-800 leading-relaxed font-normal">
-              {post.description || post.title || "Deploying our latest creative campaign iteration. Review live on the infinite node canvas."}
+              {post.description || post.title || "Deploying our latest creative campaign iteration. Review live on the infinite creative canvas."}
             </p>
 
             {post.mediaUrl ? (
@@ -605,9 +630,13 @@ export function CanvasWorkspace() {
     }
   }
 
-  const activeCollabCount = Object.keys(collaborators).length;
+  const now = Date.now();
+  const activeCollabCount = Object.values(collaborators).filter(
+    (c) => c.uid !== currentUser.uid && now - (c.lastSeen || 0) < 6000 && !c.uid.toLowerCase().includes('7f2a') && !c.name?.toUpperCase().includes('7F2A')
+  ).length;
 
   return (
+    <>
     <main
       ref={containerRef}
       onMouseDown={handleCanvasMouseDown}
@@ -615,7 +644,7 @@ export function CanvasWorkspace() {
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
       className={`flex-1 relative bg-neutral-50 dot-canvas overflow-hidden flex flex-col items-center justify-start select-none ${
-        isPanning || isSpacePressed ? 'cursor-grab active:cursor-grabbing' : ''
+        isPanning ? 'cursor-grabbing' : isHandMode || isSpacePressed ? 'cursor-grab' : ''
       } ${isMaximized ? 'fixed inset-0 z-50 w-screen h-screen' : ''}`}
       style={{
         backgroundPosition: `${panOffset.x}px ${panOffset.y}px`,
@@ -679,6 +708,19 @@ export function CanvasWorkspace() {
 
         <div className="w-[1px] h-4 bg-neutral-200/80 mx-0.5" />
 
+        {/* Hand Tool / Pan Mode Toggle */}
+        <button
+          onClick={() => setIsHandMode((prev) => !prev)}
+          className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all ${
+            isHandMode
+              ? 'bg-neutral-900 text-white shadow-xs font-semibold'
+              : 'hover:bg-neutral-100 text-neutral-600 hover:text-black'
+          }`}
+          title={isHandMode ? 'Hand Tool Active (Click to switch to Select, or press Esc / V)' : 'Hand Tool / Pan Canvas (P or hold Space)'}
+        >
+          <Hand className={`w-3.5 h-3.5 ${isHandMode ? 'text-white' : 'text-neutral-600'}`} />
+        </button>
+
         {/* Maximize Canvas Toggle */}
         <button
           onClick={() => setIsMaximized((prev) => !prev)}
@@ -689,7 +731,7 @@ export function CanvasWorkspace() {
           }`}
           title={isMaximized ? 'Exit Full Canvas (Shift+F)' : 'Expand Canvas (Shift+F)'}
         >
-          {isMaximized ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5 text-neutral-600" />}
+          {isMaximized ? <Minimize2 className="w-3.5 h-3.5" /> : <FullScreen className="w-3.5 h-3.5 text-neutral-600" />}
         </button>
       </div>
 
@@ -705,7 +747,14 @@ export function CanvasWorkspace() {
       >
         {/* Multiplayer Collaborator Live Cursors (Excalidraw style) */}
         {Object.values(collaborators).map((collab) => {
-          if (collab.uid === currentUser.uid) return null;
+          if (
+            collab.uid === currentUser.uid ||
+            now - (collab.lastSeen || 0) > 6000 ||
+            collab.uid.toLowerCase().includes('7f2a') ||
+            collab.name?.toUpperCase().includes('7F2A')
+          ) return null;
+          const cleanCollabUid = (collab.uid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '');
+          const collabShortId = cleanCollabUid ? cleanCollabUid.slice(-4).toUpperCase() : 'USER';
           return (
             <div
               key={collab.uid}
@@ -728,9 +777,9 @@ export function CanvasWorkspace() {
                 style={{ backgroundColor: collab.color || '#2563eb' }}
               >
                 {customAliases?.[collab.uid] ||
-                  ((collab.name && collab.name !== 'Collaborator' && collab.name !== 'owner' && collab.name !== 'client')
+                  ((collab.name && collab.name !== 'Collaborator' && collab.name !== 'owner' && collab.name !== 'client' && !collab.name.toUpperCase().includes('7F2A'))
                     ? collab.name
-                    : `User #${(collab.uid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '').slice(-4).toUpperCase() || '7A2B'}`)}
+                    : `User #${collabShortId}`)}
               </span>
             </div>
           );
@@ -820,7 +869,7 @@ export function CanvasWorkspace() {
                 {/* ── 1. POST NODE CARD ── */}
                 <div
                   onMouseDown={(e) => startDrag(e, post.id, 'post')}
-                  onClick={() => dispatch({ type: 'SELECT_POST', postId: post.id })}
+                  onClick={() => !isHandMode && dispatch({ type: 'SELECT_POST', postId: post.id })}
                   className="absolute z-10 cursor-grab active:cursor-grabbing flex flex-col"
                   style={{
                     left: `${postX}px`,
@@ -872,28 +921,99 @@ export function CanvasWorkspace() {
                     </div>
                   </div>
 
-                  {/* Node Media Card Preview */}
-                  <div className="overflow-hidden bg-white">
+                  {/* Node Media Card Preview — with Pin Annotation Overlay */}
+                  <div className="overflow-hidden bg-white relative">
                     {renderSocialMediaCard(post)}
+                    {/* Feature 1: Pin Annotation Overlay */}
+                    <PinAnnotationOverlay
+                      postId={post.id}
+                      cardWidth={390}
+                      cardHeight={300}
+                      pinModeActive={activePinPostId === post.id}
+                      onExitPinMode={() => setActivePinPostId(null)}
+                    />
                   </div>
 
                   {/* Node Action Footer */}
-                  <div className="p-2.5 border-t border-neutral-100 bg-neutral-50/60 flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
+                  <div className="p-2.5 border-t border-neutral-100 bg-neutral-50/60 flex items-center justify-between gap-1">
+                    <div className="flex items-center gap-1">
+                      {/* Highlight */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           togglePostHighlight(post.id);
                         }}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-medium flex items-center gap-1.5 transition-all border ${
+                        className={`px-2 py-1 rounded-lg text-[11px] font-medium flex items-center gap-1 transition-all border ${
                           post.isHighlighted
                             ? 'bg-purple-50 text-purple-700 border-purple-200 shadow-2xs font-semibold'
                             : 'text-neutral-600 hover:text-black hover:bg-neutral-100 border-transparent hover:border-neutral-200'
                         }`}
-                        title={post.isHighlighted ? 'Remove Highlight' : 'Highlight with Moving Border'}
+                        title={post.isHighlighted ? 'Remove Highlight' : 'Highlight'}
                       >
-                        <Sparkles className={`w-3.5 h-3.5 ${post.isHighlighted ? 'text-purple-600' : 'text-neutral-500'}`} />
-                        <span>{post.isHighlighted ? 'Highlighted' : 'Highlight'}</span>
+                        <Sparkles className={`w-3 h-3 ${post.isHighlighted ? 'text-purple-600' : 'text-neutral-500'}`} />
+                      </button>
+
+                      {/* Feature 1: Pin Mode toggle */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActivePinPostId(activePinPostId === post.id ? null : post.id);
+                        }}
+                        className={`px-2 py-1 rounded-lg text-[11px] font-medium flex items-center gap-1 transition-all border ${
+                          activePinPostId === post.id
+                            ? 'bg-indigo-50 text-indigo-700 border-indigo-200 shadow-2xs font-semibold'
+                            : 'text-neutral-600 hover:text-indigo-600 hover:bg-indigo-50/60 border-transparent hover:border-indigo-200'
+                        }`}
+                        title="Drop Pin Annotation on Creative (P)"
+                      >
+                        <Pin className={`w-3 h-3 ${activePinPostId === post.id ? 'text-indigo-600' : ''}`} />
+                        <span className="text-[10px]">{activePinPostId === post.id ? 'Pin Mode' : 'Pin'}</span>
+                      </button>
+
+                      {/* Feature 3: AI Audit */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAuditPostId(auditPostId === post.id ? null : post.id);
+                        }}
+                        className={`px-2 py-1 rounded-lg text-[11px] font-medium flex items-center gap-1 transition-all border ${
+                          auditPostId === post.id
+                            ? 'bg-violet-50 text-violet-700 border-violet-200 shadow-2xs font-semibold'
+                            : 'text-neutral-600 hover:text-violet-600 hover:bg-violet-50/60 border-transparent hover:border-violet-200'
+                        }`}
+                        title="AI Creative Audit"
+                      >
+                        <span className="text-[11px]">🤖</span>
+                        <span className="text-[10px]">Audit</span>
+                      </button>
+
+                      {/* Feature 4: A/B Compare — first click picks first post, second click opens modal */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!abSelectMode) {
+                            setAbSelectMode({ firstPostId: post.id });
+                          } else if (abSelectMode.firstPostId === post.id) {
+                            setAbSelectMode(null);
+                          } else {
+                            const postA = posts.find((p) => p.id === abSelectMode.firstPostId);
+                            if (postA) setAbCompare({ postA, postB: post });
+                            setAbSelectMode(null);
+                          }
+                        }}
+                        className={`px-2 py-1 rounded-lg text-[11px] font-medium flex items-center gap-1 transition-all border ${
+                          abSelectMode?.firstPostId === post.id
+                            ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-2xs font-semibold'
+                            : abSelectMode && abSelectMode.firstPostId !== post.id
+                            ? 'bg-blue-600 text-white border-blue-600 animate-pulse'
+                            : 'text-neutral-600 hover:text-blue-600 hover:bg-blue-50/60 border-transparent hover:border-blue-200'
+                        }`}
+                        title={abSelectMode ? abSelectMode.firstPostId === post.id ? 'Cancel A/B selection' : 'Compare with this post' : 'Start A/B comparison'}
+                      >
+                        <span className="text-[10px]">⚔️</span>
+                        <span className="text-[10px]">
+                          {abSelectMode?.firstPostId === post.id ? 'A ✓' : abSelectMode ? 'vs B?' : 'A/B'}
+                        </span>
                       </button>
                     </div>
 
@@ -908,21 +1028,30 @@ export function CanvasWorkspace() {
                       {isChatOpen ? (
                         <>
                           <Zap className="w-3 h-3 text-amber-500 fill-amber-500" />
-                          <span>Node Active</span>
+                          <span>Active</span>
                         </>
                       ) : (
                         <>
                           <Play className="w-3 h-3 fill-current" />
-                          <span>Start Convo</span>
+                          <span>Convo</span>
                         </>
                       )}
                     </button>
-                    </div>
                   </div>
-                </div>
+
+                  {/* Feature 3: AI Audit Panel overlay */}
+                  {auditPostId === post.id && (
+                    <AIAuditPanel
+                      post={post}
+                      onClose={() => setAuditPostId(null)}
+                    />
+                  )}
+                  </div>{/* END inner card */}
+                </div>{/* END post node wrapper */}
 
                 {/* ── 2. CONNECTED COMETCHAT ITERATION NODE ── */}
                 {isChatOpen && (
+
                   <div
                     onMouseDown={(e) => startDrag(e, post.id, 'chat')}
                     className="absolute w-[360px] rounded-2xl bg-white border border-neutral-200/90 shadow-[0_16px_40px_-6px_rgba(15,23,42,0.18)] overflow-hidden z-20 cursor-grab active:cursor-grabbing animate-fade-in text-neutral-900"
@@ -940,7 +1069,7 @@ export function CanvasWorkspace() {
                         <div>
                           <div className="flex items-center gap-1.5">
                             <span className="text-[9px] font-mono uppercase tracking-wider text-neutral-500 font-semibold">
-                              Iteration Node
+                              Review Thread
                             </span>
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                           </div>
@@ -954,7 +1083,7 @@ export function CanvasWorkspace() {
                         <button
                           onClick={(e) => toggleStartConvo(e, post.id)}
                           className="text-neutral-400 hover:text-neutral-700 p-1 rounded-lg hover:bg-neutral-100 transition-colors"
-                          title="Close Node"
+                          title="Close Thread"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -1000,7 +1129,14 @@ export function CanvasWorkspace() {
                                 {msg.senderRole}
                               </span>
                             </div>
-                            <p className="text-[11px] leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+                            {msg.text && <p className="text-[11px] leading-relaxed whitespace-pre-wrap">{msg.text}</p>}
+                            {msg.mediaUrl && msg.mediaType === 'audio' && (
+                              <VoiceMemoPlayer
+                                audioUrl={msg.mediaUrl}
+                                durationSeconds={msg.audioDuration}
+                                isMe={msg.senderUid === currentUser.uid}
+                              />
+                            )}
                           </div>
                         ))
                       )}
@@ -1031,6 +1167,32 @@ export function CanvasWorkspace() {
           })
         )}
       </div>
+
+      {/* A/B select mode hint banner */}
+      {abSelectMode && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-40 animate-fade-in pointer-events-auto">
+          <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-blue-600 text-white text-xs font-semibold shadow-xl border border-blue-500">
+            <span>A/B Mode: Click A/B on another post card to compare</span>
+            <button
+              onClick={() => setAbSelectMode(null)}
+              className="ml-2 w-5 h-5 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
     </main>
+
+      {/* Feature 4: A/B Compare Modal */}
+      {abCompare && (
+        <ABCompareModal
+          postA={abCompare.postA}
+          postB={abCompare.postB}
+          onClose={() => setAbCompare(null)}
+        />
+      )}
+    </>
   );
 }
+

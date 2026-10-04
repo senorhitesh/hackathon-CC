@@ -52,10 +52,28 @@ function UserBadge({ user, isCurrentUser }: { user: ActiveUser; isCurrentUser: b
 
 export function PresenceBar() {
   const { state } = useAppContext();
-  const { activeUsers, currentUser } = state;
+  const { activeUsers, currentUser, collaborators } = state;
 
-  const displayUsers = activeUsers.slice(0, 5);
-  const overflow = Math.max(0, activeUsers.length - 5);
+  const now = Date.now();
+  const liveOtherUids = new Set(
+    Object.values(collaborators || {})
+      .filter(
+        (c) =>
+          c.uid !== currentUser.uid &&
+          now - (c.lastSeen || 0) < 6000 &&
+          !c.uid.toLowerCase().includes('7f2a') &&
+          !c.name?.toUpperCase().includes('7F2A')
+      )
+      .map((c) => c.uid)
+  );
+
+  const liveUsers = [
+    currentUser,
+    ...activeUsers.filter((u) => u.uid !== currentUser.uid && liveOtherUids.has(u.uid)),
+  ];
+
+  const displayUsers = liveUsers.slice(0, 5);
+  const overflow = Math.max(0, liveUsers.length - 5);
 
   return (
     <div className="flex items-center gap-1" title="Active collaborators">
@@ -73,9 +91,9 @@ export function PresenceBar() {
           </div>
         )}
       </div>
-      {activeUsers.length > 0 && (
+      {liveUsers.length > 0 && (
         <span className="text-xs text-canvas-muted ml-2 hidden md:block">
-          {activeUsers.length} {activeUsers.length === 1 ? 'person' : 'people'} here
+          {liveUsers.length} {liveUsers.length === 1 ? 'person' : 'people'} here
         </span>
       )}
     </div>

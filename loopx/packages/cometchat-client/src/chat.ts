@@ -230,6 +230,72 @@ export async function addAnnotationListener(
   };
 }
 
+// ─── Real-Time Collaboration & Presence Sync (Multi-tab, Incognito & Remote) ─
+
+export const COLLAB_SYNC_CUSTOM_TYPE = 'canvas_collab_sync';
+
+export async function sendCollabSyncMessage(
+  roomId: string,
+  payload: Record<string, any>,
+): Promise<void> {
+  if (_isMockMode) return;
+
+  try {
+    const sdk = await getSDK();
+    const customData = {
+      ...payload,
+      _customType: COLLAB_SYNC_CUSTOM_TYPE,
+      timestamp: Date.now(),
+    };
+
+    const message = new sdk.CustomMessage(
+      roomId,
+      sdk.RECEIVER_TYPE.GROUP,
+      COLLAB_SYNC_CUSTOM_TYPE,
+      customData,
+    );
+    message.setShouldUpdateConversation(false);
+
+    await sdk.sendCustomMessage(message);
+  } catch (_) {
+    // Non-critical: ignore rate limits or network blips
+  }
+}
+
+export async function addCollabSyncListener(
+  listenerId: string,
+  onSync: (payload: any) => void,
+): Promise<() => void> {
+  if (_isMockMode) return () => {};
+
+  try {
+    const sdk = await getSDK();
+    const listener = new sdk.MessageListener(listenerId, {
+      onCustomMessageReceived: (message: any) => {
+        try {
+          const type = message.getType?.() || message.type;
+          if (type === COLLAB_SYNC_CUSTOM_TYPE) {
+            const data = message.getCustomData?.() || message.customData || message.data?.customData;
+            if (data) {
+              const sender = message.getSender?.()?.getUid?.() || message.sender?.uid;
+              onSync({ ...data, _senderUid: sender });
+            }
+          }
+        } catch (_) {}
+      },
+    });
+
+    sdk.addMessageListener(listenerId, listener);
+    return () => {
+      try {
+        sdk.removeMessageListener(listenerId);
+      } catch (_) {}
+    };
+  } catch (err) {
+    return () => {};
+  }
+}
+
 // ─── Presence Listener ─────────────────────────────────────────────────────────
 
 export interface PresenceCallbacks {

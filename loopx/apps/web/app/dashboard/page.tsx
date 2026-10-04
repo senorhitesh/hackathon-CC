@@ -127,13 +127,13 @@ export default function AdminDashboardPage() {
         <div className="border border-neutral-200/90 bg-white rounded-2xl p-6 text-neutral-900 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="space-y-1.5 max-w-xl">
             <span className="text-[10px] font-mono uppercase tracking-wider text-neutral-500 font-semibold">
-              Collaborative Node Engine
+              Collaborative Canvas Engine
             </span>
             <h1 className="font-serif text-2xl sm:text-3xl font-normal tracking-tight text-neutral-950">
               Campaign Workspaces
             </h1>
             <p className="text-xs text-neutral-600 leading-relaxed font-normal font-sans">
-              Each workspace provides an infinite dot-canvas with visual workflow nodes, live CometChat iterations, and multiplayer live cursor sync.
+              Each workspace provides an infinite dot-canvas with creative ad assets, live CometChat iterations, and multiplayer live cursor sync.
             </p>
           </div>
 

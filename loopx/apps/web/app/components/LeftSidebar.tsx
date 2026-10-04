@@ -34,9 +34,16 @@ export function LeftSidebar() {
   } = state;
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
 
-  // Real collaborators list
-  const otherUsers = (activeUsers || []).filter((u) => u.uid !== currentUser?.uid);
-  const totalOtherCount = Math.max(otherUsers.length, Object.keys(collaborators || {}).length);
+  // Real active collaborators list (seen within 6s)
+  const now = Date.now();
+  const activeCollabList = Object.values(collaborators || {}).filter(
+    (c) =>
+      c.uid !== currentUser?.uid &&
+      now - (c.lastSeen || 0) < 6000 &&
+      !c.uid.toLowerCase().includes('7f2a') &&
+      !c.name?.toUpperCase().includes('7F2A')
+  );
+  const totalOtherCount = activeCollabList.length;
 
   const getAvatarColor = (name: string) => {
     const colors = ['bg-indigo-500', 'bg-violet-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500', 'bg-sky-500'];
@@ -287,7 +294,7 @@ export function LeftSidebar() {
                 >
                   {(currentUser?.name || 'Y').charAt(0).toUpperCase()}
                 </div>
-                {otherUsers.slice(0, 3).map((u) => {
+                {activeCollabList.slice(0, 3).map((u) => {
                   const effName = state.customAliases?.[u.uid] || u.name;
                   return (
                     <div

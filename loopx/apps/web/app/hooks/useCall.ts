@@ -247,8 +247,11 @@ export function useCall() {
         }
 
         // 3. Derive participant identity
-        const shortId = (currentUser.uid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '').slice(-4).toUpperCase() || '7F2A';
-        const displayName = (currentUser.name && currentUser.name !== 'Collaborator' && currentUser.name !== 'owner' && currentUser.name !== 'client')
+        const cleanUid = (currentUser.uid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '');
+        const shortId = cleanUid && !cleanUid.toLowerCase().includes('7f2a') && !cleanUid.toLowerCase().includes('init')
+          ? cleanUid.slice(-4).toUpperCase()
+          : 'USER';
+        const displayName = (currentUser.name && currentUser.name !== 'Collaborator' && currentUser.name !== 'owner' && currentUser.name !== 'client' && !currentUser.name.toUpperCase().includes('7F2A'))
           ? currentUser.name
           : `User #${shortId}`;
 

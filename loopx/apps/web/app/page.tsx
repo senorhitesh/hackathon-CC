@@ -46,17 +46,17 @@ export default function LandingPage() {
         {/* Subtle pill */}
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white border border-neutral-200/90 text-neutral-700 text-xs font-mono mb-6 shadow-2xs">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          <span>Realtime Node-Based Collaboration Engine</span>
+          <span>Realtime Creative Collaboration Engine</span>
         </div>
 
         {/* Main Title with DM Serif Display */}
         <h1 className="font-serif text-4xl sm:text-6xl lg:text-7xl font-normal tracking-tight text-neutral-950 leading-[1.05] max-w-3xl mx-auto">
-          Collaborate on creative ads with visual workflow nodes.
+          Collaborate on creative ads on an infinite visual canvas.
         </h1>
 
         {/* Subtitle */}
         <p className="mt-5 text-sm sm:text-base text-neutral-600 max-w-xl mx-auto leading-relaxed font-sans">
-          Connect your creative post variations directly to CometChat iteration nodes on an infinite dot-grid canvas. Share instant collaborative links with clients.
+          Connect your creative post variations directly to CometChat review threads on an infinite dot-grid canvas. Share instant collaborative links with clients.
         </p>
 
         {/* Action Buttons */}
@@ -128,7 +128,7 @@ export default function LandingPage() {
                         <MessageSquare className="w-3 h-3" />
                       </div>
                       <span className="text-xs font-semibold text-neutral-900">
-                        CometChat Iteration Node
+                        CometChat Review Thread
                       </span>
                     </div>
                     <span className="text-[10px] font-mono text-emerald-600 font-medium">Connected</span>

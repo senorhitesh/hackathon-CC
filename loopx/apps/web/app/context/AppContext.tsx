@@ -47,7 +47,8 @@ export interface ChatMessage {
   timestamp: number;
   mediaUrl?: string;
   mediaName?: string;
-  mediaType?: 'image' | 'video' | 'file';
+  mediaType?: 'image' | 'video' | 'file' | 'audio';
+  audioDuration?: number;
 }
 
 export interface AppState extends AdProofSession {
@@ -104,6 +105,7 @@ type Action =
   | { type: 'HUDDLE_PARTICIPANT_LEFT'; uid: string }
   | { type: 'UPDATE_COLLABORATOR_CURSOR'; cursor: CollaboratorCursor }
   | { type: 'REMOVE_COLLABORATOR'; uid: string }
+  | { type: 'CLEAR_INACTIVE_COLLABORATORS' }
   | { type: 'SET_PIN_MODE'; active: boolean }
   | { type: 'SET_SELECTED_PIN'; id: string | null }
   | { type: 'SET_CHAT_MESSAGES'; messages: ChatMessage[] }
@@ -113,15 +115,20 @@ type Action =
 
 // Helper to extract clean 4-character ID from uid
 export function getCleanShortId(uid?: string): string {
-  if (!uid) return '8A1F';
+  if (!uid) return Math.random().toString(36).substring(2, 6).toUpperCase();
   const clean = uid.replace(/^(user_|usr_|collab_|client_|owner_)/i, '');
-  return (clean.slice(-4) || '8A1F').toUpperCase();
+  if (!clean || clean.toLowerCase().includes('7f2a') || clean.toLowerCase().includes('init')) {
+    let hash = 0;
+    for (let i = 0; i < uid.length; i++) hash = (hash << 5) - hash + uid.charCodeAt(i);
+    return Math.abs(hash).toString(16).slice(-4).toUpperCase().padStart(4, '9');
+  }
+  return clean.slice(-4).toUpperCase();
 }
 
 // Convert generic or legacy names like 'Collaborator' or 'owner' into professional ID-based user handles
 export function formatUserDisplayName(name?: string, uid?: string): string {
   const shortId = getCleanShortId(uid);
-  if (!name || name === 'Collaborator' || name === 'owner' || name === 'client' || name === 'User') {
+  if (!name || name === 'Collaborator' || name === 'owner' || name === 'client' || name === 'User' || name.toUpperCase().includes('7F2A')) {
     return `User #${shortId}`;
   }
   return name;
@@ -150,22 +157,20 @@ const CURSOR_COLORS = [
   '#0891b2',
 ];
 
-function getRandomColor(id: string) {
+function getRandomColor(id: string): string {
   let hash = 0;
   for (let i = 0; i < id.length; i++) {
     hash = (hash << 5) - hash + id.charCodeAt(i);
   }
-  return CURSOR_COLORS[Math.abs(hash) % CURSOR_COLORS.length];
+  return CURSOR_COLORS[Math.abs(hash) % CURSOR_COLORS.length] || '#2563eb';
 }
-
-const initialShortId = '7F2A';
 
 const initialState: AppState = {
   roomId: DEFAULT_ROOM_ID,
   sessionName: 'Creative Workspace',
   currentUser: {
-    uid: `usr_${initialShortId.toLowerCase()}`,
-    name: `User #${initialShortId}`,
+    uid: 'usr_init',
+    name: 'User',
     status: 'ONLINE',
     role: 'owner',
     isLoggedIn: false,
@@ -428,7 +433,42 @@ function reducer(state: AppState, action: Action): AppState {
     case 'REMOVE_COLLABORATOR': {
       const next = { ...state.collaborators };
       delete next[action.uid];
-      return { ...state, collaborators: next };
+      return {
+        ...state,
+        collaborators: next,
+        activeUsers: state.activeUsers.filter((u) => u.uid !== action.uid),
+      };
+    }
+
+    case 'CLEAR_INACTIVE_COLLABORATORS': {
+      const cutoff = Date.now() - 6000;
+      let changed = false;
+      const nextCollabs = { ...state.collaborators };
+      const activeUids = new Set<string>();
+      activeUids.add(state.currentUser.uid);
+
+      Object.entries(state.collaborators).forEach(([uid, c]) => {
+        const isStale = (c.lastSeen || 0) <= cutoff;
+        const isBannedLegacy = uid.toLowerCase().includes('7f2a') || c.name?.toUpperCase().includes('7F2A') || uid === 'usr_init';
+        if (!isStale && !isBannedLegacy) {
+          activeUids.add(uid);
+        } else {
+          delete nextCollabs[uid];
+          changed = true;
+        }
+      });
+
+      const nextActiveUsers = state.activeUsers.filter((u) => activeUids.has(u.uid) && !u.uid.toLowerCase().includes('7f2a') && !u.name?.toUpperCase().includes('7F2A'));
+      if (nextActiveUsers.length !== state.activeUsers.length) {
+        changed = true;
+      }
+
+      if (!changed) return state;
+      return {
+        ...state,
+        collaborators: nextCollabs,
+        activeUsers: nextActiveUsers,
+      };
     }
 
     case 'SET_PIN_MODE':
@@ -448,6 +488,14 @@ function reducer(state: AppState, action: Action): AppState {
 
     case 'CLEAR_CHAT_MESSAGES':
       if (action.postId) {
+        if (action.postId === 'general') {
+          return {
+            ...state,
+            chatMessages: state.chatMessages.filter(
+              (m) => m.postId !== 'general' && m.postId !== state.roomId && Boolean(m.postId)
+            ),
+          };
+        }
         return {
           ...state,
           chatMessages: state.chatMessages.filter((m) => m.postId !== action.postId),
@@ -492,14 +540,81 @@ interface AppContextValue {
   updateUserName: (name: string) => void;
   setUserAlias: (uid: string, alias: string) => void;
   getEffectiveUserName: (uid?: string, rawName?: string) => string;
+  removeCollaborator: (uid: string) => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
 
+export function getInitialState(): AppState {
+  let initialUser: ActiveUser & { role: UserRole; email?: string; isLoggedIn?: boolean } = {
+    uid: 'usr_init',
+    name: 'User',
+    status: 'ONLINE',
+    role: 'owner',
+    isLoggedIn: false,
+  };
+
+  if (typeof window !== 'undefined') {
+    // Purge legacy 7F2A storage keys
+    try {
+      const prefName = localStorage.getItem('loopx_preferred_name');
+      if (prefName && (prefName.toUpperCase().includes('7F2A') || prefName === 'User' || prefName === 'Collaborator')) {
+        localStorage.removeItem('loopx_preferred_name');
+      }
+      const sessionUser = localStorage.getItem('loopx_user_session');
+      if (sessionUser && sessionUser.toLowerCase().includes('7f2a')) {
+        localStorage.removeItem('loopx_user_session');
+      }
+    } catch (_) {}
+
+    let userToSet: (ActiveUser & { role: UserRole; email?: string; isLoggedIn?: boolean }) | null = null;
+    const tabUser = sessionStorage.getItem('loopx_tab_user');
+    if (tabUser) {
+      try {
+        const parsed = JSON.parse(tabUser);
+        if (
+          parsed &&
+          parsed.uid &&
+          !parsed.uid.toLowerCase().includes('7f2a') &&
+          !parsed.uid.toLowerCase().includes('usr_init') &&
+          !parsed.name?.toUpperCase().includes('7F2A')
+        ) {
+          userToSet = parsed;
+        } else {
+          sessionStorage.removeItem('loopx_tab_user');
+        }
+      } catch (_) {}
+    }
+
+    if (!userToSet) {
+      const shortId = Math.random().toString(36).substring(2, 6).toUpperCase();
+      userToSet = {
+        uid: `usr_${shortId.toLowerCase()}`,
+        name: `User #${shortId}`,
+        status: 'ONLINE',
+        role: 'owner',
+        isLoggedIn: true,
+      };
+      try {
+        sessionStorage.setItem('loopx_tab_user', JSON.stringify(userToSet));
+      } catch (_) {}
+    }
+    initialUser = userToSet;
+  }
+
+  return {
+    ...initialState,
+    currentUser: initialUser,
+  };
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, dispatch] = useReducer(reducer, undefined, getInitialState);
+  const currentUserRef = useRef(state.currentUser);
+  currentUserRef.current = state.currentUser;
   const channelRef = useRef<any>(null);
   const cursorThrottleRef = useRef<number>(0);
+  const networkCursorThrottleRef = useRef<number>(0);
 
   // Helper to construct permanent shareable URL like Excalidraw
   const getShareUrl = useCallback((roomId?: string) => {
@@ -514,45 +629,57 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const params = new URLSearchParams(window.location.search);
-    const urlRoom = params.get('room');
+    // Purge legacy 7F2A storage keys
+    try {
+      const pref = localStorage.getItem('loopx_preferred_name');
+      if (pref && (pref.toUpperCase().includes('7F2A') || pref === 'User' || pref === 'Collaborator')) {
+        localStorage.removeItem('loopx_preferred_name');
+      }
+      const sess = localStorage.getItem('loopx_user_session');
+      if (sess && sess.toLowerCase().includes('7f2a')) {
+        localStorage.removeItem('loopx_user_session');
+      }
+      const rawTab = sessionStorage.getItem('loopx_tab_user');
+      if (rawTab && (rawTab.toLowerCase().includes('7f2a') || rawTab.toLowerCase().includes('usr_init'))) {
+        sessionStorage.removeItem('loopx_tab_user');
+      }
+    } catch (_) {}
 
-    // Per-tab unique session identity so multiple tabs detect each other as distinct collaborators
-    let userToSet: (ActiveUser & { role: UserRole; email?: string; isLoggedIn?: boolean }) | null = null;
-    const tabUser = sessionStorage.getItem('loopx_tab_user');
-    if (tabUser) {
+    // Ensure valid non-init, non-7f2a user is active in state
+    if (
+      state.currentUser.uid === 'usr_init' ||
+      state.currentUser.uid.toLowerCase().includes('7f2a') ||
+      state.currentUser.name.toUpperCase().includes('7F2A')
+    ) {
+      let activeUser: any = null;
       try {
-        userToSet = JSON.parse(tabUser);
+        const stored = sessionStorage.getItem('loopx_tab_user');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed?.uid && !parsed.uid.toLowerCase().includes('7f2a') && parsed.uid !== 'usr_init') {
+            activeUser = parsed;
+          }
+        }
       } catch (_) {}
-    }
 
-    if (!userToSet) {
-      const savedUser = localStorage.getItem('loopx_user_session');
-      if (savedUser) {
+      if (!activeUser) {
+        const freshShort = Math.random().toString(36).substring(2, 6).toUpperCase();
+        activeUser = {
+          uid: `usr_${freshShort.toLowerCase()}`,
+          name: `User #${freshShort}`,
+          status: 'ONLINE' as const,
+          role: 'owner' as UserRole,
+          isLoggedIn: true,
+        };
         try {
-          const parsed = JSON.parse(savedUser);
-          const shortId = getCleanShortId(parsed.uid);
-          userToSet = {
-            ...parsed,
-            uid: parsed.uid || `usr_${shortId.toLowerCase()}`,
-            name: formatUserDisplayName(parsed.name, parsed.uid),
-            role: (parsed.role as UserRole) || 'owner',
-          };
+          sessionStorage.setItem('loopx_tab_user', JSON.stringify(activeUser));
         } catch (_) {}
       }
+      dispatch({ type: 'SET_USER', user: activeUser });
     }
 
-    const shortId = uuidv4().substring(0, 4).toUpperCase();
-    const finalUser = userToSet || {
-      uid: `usr_${shortId.toLowerCase()}`,
-      name: `User #${shortId}`,
-      status: 'ONLINE' as const,
-      role: 'owner' as const,
-      isLoggedIn: true,
-    };
-
-    sessionStorage.setItem('loopx_tab_user', JSON.stringify(finalUser));
-    dispatch({ type: 'SET_USER', user: finalUser });
+    const params = new URLSearchParams(window.location.search);
+    const urlRoom = params.get('room');
 
     const savedAliases = localStorage.getItem('loopx_user_aliases');
     if (savedAliases) {
@@ -677,29 +804,113 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     channel.postMessage({
       type: 'presence_join',
       user: {
-        uid: state.currentUser.uid,
-        name: state.currentUser.name,
-        role: state.currentUser.role,
+        uid: currentUserRef.current.uid,
+        name: currentUserRef.current.name,
+        role: currentUserRef.current.role,
         status: 'ONLINE',
       },
     });
 
+    // Also send a ping so any already open tabs immediately report back
+    channel.postMessage({
+      type: 'presence_ping',
+      uid: currentUserRef.current.uid,
+    });
+
+    // Heartbeat every 2.5s so other tabs know this tab is actively open
+    const heartbeatInterval = setInterval(() => {
+      const myUser = {
+        uid: currentUserRef.current.uid,
+        name: currentUserRef.current.name,
+        role: currentUserRef.current.role,
+        status: 'ONLINE' as const,
+      };
+
+      if (channelRef.current && myUser.uid) {
+        try {
+          channelRef.current.postMessage({
+            type: 'presence_heartbeat',
+            user: myUser,
+          });
+        } catch (_) {}
+      }
+
+      // Also broadcast over CometChat network (connects incognito tabs & remote peers)
+      if (myUser.uid && state.roomId) {
+        import('@repo/cometchat-client').then(({ sendCollabSyncMessage }) => {
+          sendCollabSyncMessage(state.roomId, {
+            type: 'presence_heartbeat',
+            user: myUser,
+          }).catch(() => {});
+        }).catch(() => {});
+      }
+    }, 2500);
+
+    // Auto-reaper: clean up any tab that closed or hasn't heartbeated in > 6s
+    const reaperInterval = setInterval(() => {
+      dispatch({ type: 'CLEAR_INACTIVE_COLLABORATORS' });
+    }, 2000);
+
     const handleBeforeUnload = () => {
+      const leaveUid = currentUserRef.current.uid;
       try {
         channel.postMessage({
           type: 'presence_leave',
-          uid: state.currentUser.uid,
+          uid: leaveUid,
         });
       } catch (_) {}
+
+      if (leaveUid && state.roomId) {
+        import('@repo/cometchat-client').then(({ sendCollabSyncMessage }) => {
+          sendCollabSyncMessage(state.roomId, {
+            type: 'presence_leave',
+            uid: leaveUid,
+          }).catch(() => {});
+        }).catch(() => {});
+      }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handleBeforeUnload);
 
     channel.onmessage = (event) => {
       const payload = event.data;
       if (!payload) return;
 
+      const myUid = currentUserRef.current.uid;
+      const myName = currentUserRef.current.name;
+      const myRole = currentUserRef.current.role;
+
+      // Discard any incoming 7F2A / init legacy spam
+      const incomingUid = payload.user?.uid || payload.uid || payload.senderUid || '';
+      if (incomingUid.toLowerCase().includes('7f2a') || incomingUid === 'usr_init' || payload.user?.name?.toUpperCase().includes('7F2A')) {
+        return;
+      }
+
+      // Check for duplicate tab UID collision (e.g. if tab was duplicated in Chrome)
+      if (payload.type === 'presence_join' || payload.type === 'presence_heartbeat' || payload.type === 'presence_ping') {
+        if (incomingUid === myUid) {
+          // Both tabs have the exact same UID! Regenerate our tab's UID immediately
+          const newShortId = Math.random().toString(36).substring(2, 6).toUpperCase();
+          const regeneratedUser = {
+            ...currentUserRef.current,
+            uid: `usr_${newShortId.toLowerCase()}`,
+            name: `User #${newShortId}`,
+          };
+          currentUserRef.current = regeneratedUser;
+          try {
+            sessionStorage.setItem('loopx_tab_user', JSON.stringify(regeneratedUser));
+          } catch (_) {}
+          dispatch({ type: 'SET_USER', user: regeneratedUser });
+          channel.postMessage({
+            type: 'presence_join',
+            user: regeneratedUser,
+          });
+          return;
+        }
+      }
+
       if (payload.type === 'cursor_move') {
-        if (payload.uid === state.currentUser.uid) return;
+        if (payload.uid === myUid) return;
         dispatch({
           type: 'UPDATE_COLLABORATOR_CURSOR',
           cursor: {
@@ -712,7 +923,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             lastSeen: Date.now(),
           },
         });
-        // Ensure moving collaborator is in activeUsers
         dispatch({
           type: 'USER_JOINED',
           user: {
@@ -721,24 +931,52 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             status: 'ONLINE',
           },
         });
-      } else if (payload.type === 'presence_join') {
-        if (payload.user?.uid === state.currentUser.uid) return;
-        dispatch({ type: 'USER_JOINED', user: payload.user });
-        // Reply with our presence so the joiner immediately knows about us
+      } else if (payload.type === 'presence_join' || payload.type === 'presence_ping') {
+        if (incomingUid === myUid) return;
+        if (payload.user?.uid) {
+          dispatch({ type: 'USER_JOINED', user: payload.user });
+          dispatch({
+            type: 'UPDATE_COLLABORATOR_CURSOR',
+            cursor: {
+              uid: payload.user.uid,
+              name: payload.user.name || 'Collaborator',
+              role: payload.user.role || 'client',
+              color: getRandomColor(payload.user.uid),
+              x: state.collaborators[payload.user.uid]?.x ?? 0,
+              y: state.collaborators[payload.user.uid]?.y ?? 0,
+              lastSeen: Date.now(),
+            },
+          });
+        }
+        // Reply with our presence so the joining/pinging tab immediately registers us
         channel.postMessage({
           type: 'presence_ack',
           user: {
-            uid: state.currentUser.uid,
-            name: state.currentUser.name,
-            role: state.currentUser.role,
+            uid: myUid,
+            name: myName,
+            role: myRole,
             status: 'ONLINE',
           },
         });
-      } else if (payload.type === 'presence_ack') {
-        if (payload.user?.uid === state.currentUser.uid) return;
-        dispatch({ type: 'USER_JOINED', user: payload.user });
+      } else if (payload.type === 'presence_ack' || payload.type === 'presence_heartbeat') {
+        if (incomingUid === myUid) return;
+        if (payload.user?.uid) {
+          dispatch({ type: 'USER_JOINED', user: payload.user });
+          dispatch({
+            type: 'UPDATE_COLLABORATOR_CURSOR',
+            cursor: {
+              uid: payload.user.uid,
+              name: payload.user.name || 'Collaborator',
+              role: payload.user.role || 'client',
+              color: getRandomColor(payload.user.uid),
+              x: state.collaborators[payload.user.uid]?.x ?? 0,
+              y: state.collaborators[payload.user.uid]?.y ?? 0,
+              lastSeen: Date.now(),
+            },
+          });
+        }
       } else if (payload.type === 'user_name_changed') {
-        if (payload.uid === state.currentUser.uid) return;
+        if (payload.uid === myUid) return;
         dispatch({
           type: 'USER_JOINED',
           user: {
@@ -760,11 +998,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           },
         });
       } else if (payload.type === 'presence_leave') {
-        if (payload.uid === state.currentUser.uid) return;
+        if (payload.uid === myUid) return;
         dispatch({ type: 'USER_LEFT', uid: payload.uid });
         dispatch({ type: 'REMOVE_COLLABORATOR', uid: payload.uid });
       } else if (payload.type === 'canvas_sync') {
-        if (payload.senderUid === state.currentUser.uid) return;
+        if (payload.senderUid === myUid) return;
         switch (payload.event) {
           case 'POST_MOVED':
             dispatch({
@@ -814,7 +1052,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             });
             break;
           case 'CHAT_MESSAGE':
-            if (payload.message) {
+            if (payload.message && !isLegacyMockMessage(payload.message)) {
               dispatch({
                 type: 'ADD_CHAT_MESSAGE',
                 message: payload.message,
@@ -826,12 +1064,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
 
     return () => {
+      clearInterval(heartbeatInterval);
+      clearInterval(reaperInterval);
       handleBeforeUnload();
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handleBeforeUnload);
       channel.close();
       channelRef.current = null;
     };
-  }, [state.roomId, state.currentUser.uid, state.currentUser.name, state.currentUser.role]);
+  }, [state.roomId]);
 
   // Broadcast cursor with throttle (max 30fps)
   const broadcastCursor = useCallback((x: number, y: number) => {
@@ -839,20 +1080,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (now - cursorThrottleRef.current < 32) return;
     cursorThrottleRef.current = now;
 
-    if (channelRef.current) {
+    if (channelRef.current && currentUserRef.current.uid) {
       try {
         channelRef.current.postMessage({
           type: 'cursor_move',
-          uid: state.currentUser.uid,
-          name: state.currentUser.name,
-          role: state.currentUser.role,
-          color: getRandomColor(state.currentUser.uid),
+          uid: currentUserRef.current.uid,
+          name: currentUserRef.current.name,
+          role: currentUserRef.current.role,
+          color: getRandomColor(currentUserRef.current.uid),
           x,
           y,
         });
       } catch (_) {}
     }
-  }, [state.currentUser.uid, state.currentUser.name, state.currentUser.role]);
+
+    // Network cursor over CometChat (throttled to ~100ms) for incognito tabs & remote peers
+    if (now - networkCursorThrottleRef.current > 100 && currentUserRef.current.uid && state.roomId) {
+      networkCursorThrottleRef.current = now;
+      import('@repo/cometchat-client').then(({ sendCollabSyncMessage }) => {
+        sendCollabSyncMessage(state.roomId, {
+          type: 'cursor_move',
+          uid: currentUserRef.current.uid,
+          name: currentUserRef.current.name,
+          role: currentUserRef.current.role,
+          color: getRandomColor(currentUserRef.current.uid),
+          x,
+          y,
+        }).catch(() => {});
+      }).catch(() => {});
+    }
+  }, [state.roomId]);
 
   // Update own user display name and broadcast across tabs/collaborators
   const updateUserName = useCallback(
@@ -860,24 +1117,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const trimmed = name.trim();
       if (!trimmed) return;
       dispatch({ type: 'SET_USER_NAME', name: trimmed });
-      const updatedUser = { ...state.currentUser, name: trimmed };
+      const updatedUser = { ...currentUserRef.current, name: trimmed };
       if (typeof window !== 'undefined') {
         try {
           sessionStorage.setItem('loopx_tab_user', JSON.stringify(updatedUser));
-          localStorage.setItem('loopx_user_session', JSON.stringify(updatedUser));
+          localStorage.setItem('loopx_preferred_name', trimmed);
         } catch (_) {}
       }
       if (channelRef.current) {
         try {
           channelRef.current.postMessage({
             type: 'user_name_changed',
-            uid: state.currentUser.uid,
+            uid: currentUserRef.current.uid,
             name: trimmed,
           });
         } catch (_) {}
       }
     },
-    [state.currentUser],
+    [],
   );
 
   // Give a custom alias/name to a particular collaborator UID
@@ -909,6 +1166,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
     [state.customAliases],
   );
+
+  const removeCollaborator = useCallback((uid: string) => {
+    dispatch({ type: 'REMOVE_COLLABORATOR', uid });
+    dispatch({ type: 'USER_LEFT', uid });
+    if (channelRef.current) {
+      try {
+        channelRef.current.postMessage({ type: 'presence_leave', uid });
+      } catch (_) {}
+    }
+  }, []);
 
   const loginUser = useCallback((name: string, role: UserRole, email?: string) => {
     const user: ActiveUser & { role: UserRole; email?: string; isLoggedIn?: boolean } = {
@@ -983,7 +1250,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       dispatch({ type: 'ADD_POST', post });
 
-      // Broadcast to other collaborators
+      // Broadcast to other collaborators (Local & CometChat Network)
       if (channelRef.current) {
         try {
           channelRef.current.postMessage({
@@ -994,6 +1261,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           });
         } catch (_) {}
       }
+
+      import('@repo/cometchat-client').then(({ sendCollabSyncMessage }) => {
+        sendCollabSyncMessage(state.roomId, {
+          type: 'canvas_sync',
+          event: 'POST_CREATED',
+          post,
+          senderUid: state.currentUser.uid,
+        }).catch(() => {});
+      }).catch(() => {});
 
       return post;
     },
@@ -1014,7 +1290,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         });
       } catch (_) {}
     }
-  }, [state.currentUser.uid]);
+
+    import('@repo/cometchat-client').then(({ sendCollabSyncMessage }) => {
+      sendCollabSyncMessage(state.roomId, {
+        type: 'canvas_sync',
+        event: 'POST_DELETED',
+        postId,
+        senderUid: state.currentUser.uid,
+      }).catch(() => {});
+    }).catch(() => {});
+  }, [state.roomId, state.currentUser.uid]);
 
   const updatePostPosition = useCallback((postId: string, x: number, y: number) => {
     dispatch({ type: 'UPDATE_POST_POSITION', postId, x, y });
@@ -1032,7 +1317,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         });
       } catch (_) {}
     }
-  }, [state.currentUser.uid]);
+
+    import('@repo/cometchat-client').then(({ sendCollabSyncMessage }) => {
+      sendCollabSyncMessage(state.roomId, {
+        type: 'canvas_sync',
+        event: 'POST_MOVED',
+        postId,
+        x,
+        y,
+        senderUid: state.currentUser.uid,
+      }).catch(() => {});
+    }).catch(() => {});
+  }, [state.roomId, state.currentUser.uid]);
 
   const updatePostStatus = useCallback((postId: string, status: BoardPost['status']) => {
     dispatch({ type: 'UPDATE_POST_STATUS', postId, status });
@@ -1048,7 +1344,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         });
       } catch (_) {}
     }
-  }, [state.currentUser.uid]);
+
+    import('@repo/cometchat-client').then(({ sendCollabSyncMessage }) => {
+      sendCollabSyncMessage(state.roomId, {
+        type: 'canvas_sync',
+        event: 'POST_STATUS',
+        postId,
+        status,
+        senderUid: state.currentUser.uid,
+      }).catch(() => {});
+    }).catch(() => {});
+  }, [state.roomId, state.currentUser.uid]);
 
   const togglePostHighlight = useCallback((postId: string) => {
     dispatch({ type: 'TOGGLE_POST_HIGHLIGHT', postId });
@@ -1063,7 +1369,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         });
       } catch (_) {}
     }
-  }, [state.currentUser.uid]);
+
+    import('@repo/cometchat-client').then(({ sendCollabSyncMessage }) => {
+      sendCollabSyncMessage(state.roomId, {
+        type: 'canvas_sync',
+        event: 'POST_HIGHLIGHTED',
+        postId,
+        senderUid: state.currentUser.uid,
+      }).catch(() => {});
+    }).catch(() => {});
+  }, [state.roomId, state.currentUser.uid]);
 
   const addBrandAsset = useCallback(
     (name: string, category: BrandAsset['category'], src: string) => {
@@ -1188,6 +1503,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const key = `loopx_chat_${state.roomId}`;
           if (!postId) {
             localStorage.removeItem(key);
+          } else if (postId === 'general') {
+            const remaining = state.chatMessages.filter(
+              (m) => m.postId !== 'general' && m.postId !== state.roomId && Boolean(m.postId)
+            );
+            localStorage.setItem(key, JSON.stringify(remaining));
           } else {
             const remaining = state.chatMessages.filter((m) => m.postId !== postId);
             localStorage.setItem(key, JSON.stringify(remaining));
@@ -1224,6 +1544,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updateUserName,
         setUserAlias,
         getEffectiveUserName,
+        removeCollaborator,
       }}
     >
       {children}

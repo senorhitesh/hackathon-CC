@@ -19,8 +19,11 @@ import {
   X,
   Download,
   Upload,
+  Hash,
+  Layers,
 } from './icons/Hugeicons';
 import type { BoardPost } from '@repo/types';
+import { VoiceMemoRecorder, VoiceMemoPlayer } from './VoiceMemoRecorder';
 
 export function PostChatPanel() {
   const {
@@ -37,6 +40,8 @@ export function PostChatPanel() {
   const [inputText, setInputText] = useState('');
   const [isMinimized, setIsMinimized] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [chatMode, setChatMode] = useState<'general' | 'frame'>('frame');
   const [selectedMedia, setSelectedMedia] = useState<{
     file: File;
     previewUrl: string;
@@ -52,23 +57,42 @@ export function PostChatPanel() {
   const [renamingUid, setRenamingUid] = useState<string | null>(null);
   const [renamingInput, setRenamingInput] = useState('');
 
-  const currentPostId = activePostId || (posts.length > 0 ? posts[0]?.id : null);
-  const activePost = posts.find((p) => p.id === currentPostId);
+  // Selected frame post ID
+  const selectedFramePostId = activePostId || (posts.length > 0 ? posts[0]?.id : null);
+  const activePost = posts.find((p) => p.id === selectedFramePostId);
+
+  // When activePostId changes (user selected a frame on canvas), auto-switch to frame mode
+  const prevActivePostIdRef = useRef(activePostId);
+  useEffect(() => {
+    if (activePostId && activePostId !== prevActivePostIdRef.current) {
+      setChatMode('frame');
+    }
+    prevActivePostIdRef.current = activePostId;
+  }, [activePostId]);
 
   // Derive clean ID-based display name for current user
-  const myShortId = (currentUser.uid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '').slice(-4).toUpperCase() || '7F2A';
-  const myDisplayName = (currentUser.name && currentUser.name !== 'Collaborator' && currentUser.name !== 'owner' && currentUser.name !== 'client')
+  const cleanMyUid = (currentUser.uid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '');
+  const myShortId = cleanMyUid && !cleanMyUid.toLowerCase().includes('7f2a') && !cleanMyUid.toLowerCase().includes('init')
+    ? cleanMyUid.slice(-4).toUpperCase()
+    : 'USER';
+  const myDisplayName = (currentUser.name && currentUser.name !== 'Collaborator' && currentUser.name !== 'owner' && currentUser.name !== 'client' && !currentUser.name.toUpperCase().includes('7F2A'))
     ? currentUser.name
     : `User #${myShortId}`;
 
-  // Each post has its own unique chat thread
-  const postMessages = currentPostId
-    ? chatMessages.filter((m) => m.postId === currentPostId)
-    : chatMessages.filter((m) => m.postId === state.roomId || m.postId === 'general');
+  // Mode-based message streams
+  const generalMessages = chatMessages.filter(
+    (m) => m.postId === 'general' || m.postId === state.roomId || !m.postId
+  );
+  const frameMessages = selectedFramePostId
+    ? chatMessages.filter((m) => m.postId === selectedFramePostId)
+    : [];
+
+  const postMessages = chatMode === 'general' ? generalMessages : frameMessages;
+  const currentPostId = chatMode === 'general' ? 'general' : (selectedFramePostId || 'general');
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [postMessages.length]);
+  }, [postMessages.length, chatMode]);
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -129,6 +153,24 @@ export function PostChatPanel() {
     setIsSending(false);
   }
 
+  async function handleVoiceMemoReady(audioBlob: Blob, durationSeconds: number) {
+    const audioUrl = URL.createObjectURL(audioBlob);
+    setIsSending(true);
+    try {
+      await sendMessage('', currentPostId || undefined, {
+        file: audioBlob,
+        url: audioUrl,
+        name: `voice-memo-${Date.now()}.webm`,
+        type: 'audio',
+        audioDuration: durationSeconds,
+      });
+    } catch (err) {
+      console.warn('[loopx] Send voice memo failed:', err);
+    }
+    setIsSending(false);
+    setIsRecordingVoice(false);
+  }
+
   if (isMinimized) {
     return (
       <button
@@ -137,7 +179,9 @@ export function PostChatPanel() {
       >
         <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
         <MessageSquare className="w-3.5 h-3.5 text-neutral-300" />
-        <span className="font-semibold tracking-tight">Live Chat</span>
+        <span className="font-semibold tracking-tight">
+          {chatMode === 'general' ? '#general Chat' : (activePost ? activePost.title : 'Live Chat')}
+        </span>
         {postMessages.length > 0 && (
           <span className="px-1.5 py-0.2 rounded-full bg-white/20 text-white text-[10px] font-mono font-bold flex items-center justify-center">
             {postMessages.length}
@@ -149,7 +193,7 @@ export function PostChatPanel() {
 
   return (
     <aside className="w-[340px] bg-white/95 backdrop-blur-md border-l border-neutral-200 flex flex-col h-[calc(100vh-48px)] flex-shrink-0 z-30 select-none shadow-xl transition-all font-sans">
-      {/* ── Top Header (Matching Image 1) ── */}
+      {/* ── Top Header ── */}
       <div className="px-4 py-3.5 border-b border-neutral-100 flex items-center justify-between bg-white">
         <div className="flex items-center gap-2.5">
           <button
@@ -160,8 +204,10 @@ export function PostChatPanel() {
             <Menu className="w-4 h-4" />
           </button>
           <div>
-            <h3 className="text-xs font-semibold text-neutral-900">
-              {activePost ? activePost.title : 'Live Discussion'}
+            <h3 className="text-xs font-semibold text-neutral-900 truncate max-w-[150px]">
+              {chatMode === 'general'
+                ? '#general · Studio Chat'
+                : (activePost ? activePost.title : 'Live Discussion')}
             </h3>
             <span className="text-[10px] font-mono text-emerald-600 flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -173,7 +219,7 @@ export function PostChatPanel() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => dispatch({ type: 'TOGGLE_MODAL', modal: 'isCreatePostOpen', value: true })}
-            title="New Creative Node"
+            title="New Ad Creative"
             className="w-7 h-7 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-700 flex items-center justify-center transition-colors shadow-xs"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -186,15 +232,104 @@ export function PostChatPanel() {
         </div>
       </div>
 
+      {/* ── Chat Mode Switcher (General vs Frame Specific) ── */}
+      <div className="px-3 py-2 bg-neutral-50/90 border-b border-neutral-100 shrink-0">
+        <div className="grid grid-cols-2 p-1 bg-neutral-200/70 rounded-xl gap-1">
+          <button
+            type="button"
+            onClick={() => setChatMode('general')}
+            className={`py-1.5 px-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-all ${
+              chatMode === 'general'
+                ? 'bg-white text-neutral-900 shadow-xs font-semibold'
+                : 'text-neutral-500 hover:text-neutral-900 hover:bg-white/40'
+            }`}
+          >
+            <Hash className={`w-3.5 h-3.5 ${chatMode === 'general' ? 'text-blue-600' : 'text-neutral-400'}`} />
+            <span>General</span>
+            {generalMessages.length > 0 && (
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold leading-none ${
+                chatMode === 'general' ? 'bg-blue-100 text-blue-700' : 'bg-neutral-300 text-neutral-700'
+              }`}>
+                {generalMessages.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setChatMode('frame')}
+            className={`py-1.5 px-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-all ${
+              chatMode === 'frame'
+                ? 'bg-white text-neutral-900 shadow-xs font-semibold'
+                : 'text-neutral-500 hover:text-neutral-900 hover:bg-white/40'
+            }`}
+          >
+            <Layers className={`w-3.5 h-3.5 ${chatMode === 'frame' ? 'text-purple-600' : 'text-neutral-400'}`} />
+            <span className="truncate">Frame Specific</span>
+            {frameMessages.length > 0 && (
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold leading-none ${
+                chatMode === 'frame' ? 'bg-purple-100 text-purple-700' : 'bg-neutral-300 text-neutral-700'
+              }`}>
+                {frameMessages.length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Quick Frame Switcher Pills when in Frame Mode */}
+        {chatMode === 'frame' && posts.length > 0 && (
+          <div className="mt-2 pt-1.5 border-t border-neutral-200/50 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+            <span className="text-[10px] uppercase font-mono text-neutral-400 shrink-0 font-medium">Frames:</span>
+            {posts.map((post) => {
+              const isSelected = post.id === selectedFramePostId;
+              const msgCount = chatMessages.filter((m) => m.postId === post.id).length;
+              return (
+                <button
+                  key={post.id}
+                  type="button"
+                  onClick={() => dispatch({ type: 'SELECT_POST', postId: post.id })}
+                  title={post.title}
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-medium shrink-0 flex items-center gap-1 transition-all ${
+                    isSelected
+                      ? 'bg-neutral-900 text-white shadow-2xs font-semibold'
+                      : 'bg-white text-neutral-600 border border-neutral-200/80 hover:border-neutral-300 hover:text-neutral-900'
+                  }`}
+                >
+                  <span className="truncate max-w-[85px]">{post.title || 'Untitled'}</span>
+                  {msgCount > 0 && (
+                    <span className={`text-[9px] px-1 rounded-full font-mono ${
+                      isSelected ? 'bg-white/20 text-white' : 'bg-neutral-100 text-neutral-500'
+                    }`}>
+                      {msgCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* ── Scrollable Body ── */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Welcome Section (Matching Image 1) */}
+        {/* Welcome Section */}
         <div className="bg-gradient-to-b from-blue-50/50 via-white to-transparent p-3.5 rounded-2xl border border-blue-100/60">
           <div className="flex items-center gap-1.5 text-blue-600 mb-1">
-            <Sparkles className="w-4 h-4" />
-            <span className="text-[11px] font-semibold uppercase tracking-wider">
-              Creative Thread
-            </span>
+            {chatMode === 'general' ? (
+              <>
+                <Hash className="w-4 h-4 text-blue-600" />
+                <span className="text-[11px] font-semibold uppercase tracking-wider">
+                  Studio Channel · #General
+                </span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4 text-purple-600" />
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-purple-700 truncate max-w-[200px]">
+                  Frame Thread · {activePost ? activePost.title : 'Select Frame'}
+                </span>
+              </>
+            )}
           </div>
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-neutral-900">
@@ -267,57 +402,108 @@ export function PostChatPanel() {
           )}
 
           <p className="text-xs text-neutral-500 mt-1 leading-relaxed">
-            Collaborate with your partner on ad copy, visual assets, and approvals in real-time.
+            {chatMode === 'general'
+              ? 'Workspace-wide channel for team syncs, creative direction, and studio announcements.'
+              : 'Collaborate with your partner on ad copy, visual assets, and approvals in real-time.'}
           </p>
 
-          {/* 3 Quick Action Chips (Matching Image 1 design) */}
+          {/* 3 Quick Action Chips */}
           <div className="grid grid-cols-3 gap-2 mt-3">
-            <button
-              type="button"
-              onClick={() => handleQuickPrompt('Could we test a bolder headline copy for this creative?')}
-              className="p-2 rounded-xl bg-gradient-to-br from-purple-50 to-indigo-50/70 border border-purple-100/80 hover:border-purple-300 text-left transition-all hover:scale-[1.02] shadow-xs group"
-            >
-              <div className="w-6 h-6 rounded-lg bg-purple-500/10 text-purple-600 flex items-center justify-center text-[11px] font-bold mb-1.5 group-hover:bg-purple-600 group-hover:text-white transition-colors">
-                ✍️
-              </div>
-              <p className="text-[11px] font-semibold text-neutral-900 leading-tight">Review Copy</p>
-              <span className="text-[9px] text-neutral-500 block mt-0.5 font-mono">Headline</span>
-            </button>
+            {chatMode === 'general' ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleQuickPrompt("Team sync: let's align on upcoming creative deliverables & goals.")}
+                  className="p-2 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50/70 border border-blue-100/80 hover:border-blue-300 text-left transition-all hover:scale-[1.02] shadow-xs group"
+                >
+                  <div className="w-6 h-6 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center text-[11px] font-bold mb-1.5 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                    📢
+                  </div>
+                  <p className="text-[11px] font-semibold text-neutral-900 leading-tight">Team Sync</p>
+                  <span className="text-[9px] text-neutral-500 block mt-0.5 font-mono">Milestone</span>
+                </button>
 
-            <button
-              type="button"
-              onClick={() => handleQuickPrompt('Checking the visual hierarchy and color contrast.')}
-              className="p-2 rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50/70 border border-emerald-100/80 hover:border-emerald-300 text-left transition-all hover:scale-[1.02] shadow-xs group"
-            >
-              <div className="w-6 h-6 rounded-lg bg-teal-500/10 text-teal-600 flex items-center justify-center text-[11px] font-bold mb-1.5 group-hover:bg-teal-600 group-hover:text-white transition-colors">
-                🎨
-              </div>
-              <p className="text-[11px] font-semibold text-neutral-900 leading-tight">Visual Polish</p>
-              <span className="text-[9px] text-neutral-500 block mt-0.5 font-mono">Palette</span>
-            </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickPrompt('Brainstorming new visual concepts & high-converting angles.')}
+                  className="p-2 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50/70 border border-purple-100/80 hover:border-purple-300 text-left transition-all hover:scale-[1.02] shadow-xs group"
+                >
+                  <div className="w-6 h-6 rounded-lg bg-purple-500/10 text-purple-600 flex items-center justify-center text-[11px] font-bold mb-1.5 group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                    💡
+                  </div>
+                  <p className="text-[11px] font-semibold text-neutral-900 leading-tight">Brainstorm</p>
+                  <span className="text-[9px] text-neutral-500 block mt-0.5 font-mono">Ideate</span>
+                </button>
 
-            <button
-              type="button"
-              onClick={() => handleQuickPrompt('This iteration looks ready to ship! Approved on my end. ✅')}
-              className="p-2 rounded-xl bg-gradient-to-br from-amber-50 to-orange-50/70 border border-amber-100/80 hover:border-amber-300 text-left transition-all hover:scale-[1.02] shadow-xs group"
-            >
-              <div className="w-6 h-6 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center text-[11px] font-bold mb-1.5 group-hover:bg-amber-600 group-hover:text-white transition-colors">
-                ✅
-              </div>
-              <p className="text-[11px] font-semibold text-neutral-900 leading-tight">Approve Draft</p>
-              <span className="text-[9px] text-neutral-500 block mt-0.5 font-mono">Sign-off</span>
-            </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickPrompt('All creative assets look cohesive and ready for campaign launch! 🚀')}
+                  className="p-2 rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50/70 border border-emerald-100/80 hover:border-emerald-300 text-left transition-all hover:scale-[1.02] shadow-xs group"
+                >
+                  <div className="w-6 h-6 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center text-[11px] font-bold mb-1.5 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                    🚀
+                  </div>
+                  <p className="text-[11px] font-semibold text-neutral-900 leading-tight">Launch Ready</p>
+                  <span className="text-[9px] text-neutral-500 block mt-0.5 font-mono">Sign-off</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleQuickPrompt('Could we test a bolder headline copy for this creative?')}
+                  className="p-2 rounded-xl bg-gradient-to-br from-purple-50 to-indigo-50/70 border border-purple-100/80 hover:border-purple-300 text-left transition-all hover:scale-[1.02] shadow-xs group"
+                >
+                  <div className="w-6 h-6 rounded-lg bg-purple-500/10 text-purple-600 flex items-center justify-center text-[11px] font-bold mb-1.5 group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                    ✍️
+                  </div>
+                  <p className="text-[11px] font-semibold text-neutral-900 leading-tight">Review Copy</p>
+                  <span className="text-[9px] text-neutral-500 block mt-0.5 font-mono">Headline</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleQuickPrompt('Checking the visual hierarchy and color contrast.')}
+                  className="p-2 rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50/70 border border-emerald-100/80 hover:border-emerald-300 text-left transition-all hover:scale-[1.02] shadow-xs group"
+                >
+                  <div className="w-6 h-6 rounded-lg bg-teal-500/10 text-teal-600 flex items-center justify-center text-[11px] font-bold mb-1.5 group-hover:bg-teal-600 group-hover:text-white transition-colors">
+                    🎨
+                  </div>
+                  <p className="text-[11px] font-semibold text-neutral-900 leading-tight">Visual Polish</p>
+                  <span className="text-[9px] text-neutral-500 block mt-0.5 font-mono">Palette</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleQuickPrompt('This iteration looks ready to ship! Approved on my end. ✅')}
+                  className="p-2 rounded-xl bg-gradient-to-br from-amber-50 to-orange-50/70 border border-amber-100/80 hover:border-amber-300 text-left transition-all hover:scale-[1.02] shadow-xs group"
+                >
+                  <div className="w-6 h-6 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center text-[11px] font-bold mb-1.5 group-hover:bg-amber-600 group-hover:text-white transition-colors">
+                    ✅
+                  </div>
+                  <p className="text-[11px] font-semibold text-neutral-900 leading-tight">Approve Draft</p>
+                  <span className="text-[9px] text-neutral-500 block mt-0.5 font-mono">Sign-off</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
 
         {/* ── Active Conversation Stream Between the Two Users ── */}
         <div className="space-y-3">
           <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-neutral-400 px-1">
-            <span className="truncate max-w-[140px]">
-              {activePost ? `Thread: ${activePost.title}` : 'Workspace Thread'}
+            <span className="truncate max-w-[140px] flex items-center gap-1">
+              {chatMode === 'general' ? (
+                <>
+                  <Hash className="w-3 h-3 text-blue-500" />
+                  <span>Channel: #general</span>
+                </>
+              ) : (
+                <span>{activePost ? `Thread: ${activePost.title}` : 'No Frame Selected'}</span>
+              )}
             </span>
             <div className="flex items-center gap-1.5">
-              {activePost?.mediaUrl && (
+              {chatMode === 'frame' && activePost?.mediaUrl && (
                 <a
                   href={activePost.mediaUrl}
                   download={activePost.title ? `${activePost.title.toLowerCase().replace(/\s+/g, '-')}-asset` : 'creative-asset'}
@@ -347,16 +533,37 @@ export function PostChatPanel() {
           {postMessages.length === 0 ? (
             <div className="p-5 text-center rounded-xl bg-neutral-50/60 border border-neutral-100 text-neutral-400">
               <p className="text-xs font-semibold text-neutral-700 mb-1">
-                {activePost ? `Thread for "${activePost.title}"` : 'Workspace Thread'}
+                {chatMode === 'general'
+                  ? 'Welcome to #general Studio Chat'
+                  : activePost
+                    ? `Thread for "${activePost.title}"`
+                    : 'No Frame Selected'}
               </p>
               <p className="text-[11px] leading-relaxed text-neutral-500">
-                No messages yet for this creative. Start the review thread below!
+                {chatMode === 'general'
+                  ? 'No general updates yet. Start a workspace-wide discussion or announcement below!'
+                  : activePost
+                    ? 'No messages yet for this creative. Start the review thread below!'
+                    : 'Click any creative card on the canvas or frame pill above, or switch to General Chat.'}
               </p>
+              {chatMode === 'frame' && !activePost && (
+                <button
+                  type="button"
+                  onClick={() => setChatMode('general')}
+                  className="mt-2.5 px-3 py-1 rounded-lg bg-neutral-900 text-white text-[11px] font-semibold hover:bg-neutral-800 transition-all inline-flex items-center gap-1 shadow-2xs"
+                >
+                  <Hash className="w-3 h-3 text-blue-400" />
+                  <span>Switch to General Chat</span>
+                </button>
+              )}
             </div>
           ) : (
             postMessages.map((msg) => {
               const isMe = msg.senderUid === currentUser.uid;
-              const shortId = (msg.senderUid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '').slice(-4).toUpperCase() || '7F2A';
+              const cleanSender = (msg.senderUid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '');
+              const shortId = cleanSender && !cleanSender.toLowerCase().includes('7f2a') && !cleanSender.toLowerCase().includes('init')
+                ? cleanSender.slice(-4).toUpperCase()
+                : 'USER';
               const effName = getEffectiveUserName(msg.senderUid, msg.senderName);
               const displayName = isMe ? 'You' : effName;
               const isRenaming = renamingUid === msg.senderUid;
@@ -437,8 +644,17 @@ export function PostChatPanel() {
                   >
                     {msg.text && <p className="whitespace-pre-wrap">{msg.text}</p>}
 
-                    {/* Media Attachment */}
-                    {msg.mediaUrl && (
+                    {/* Audio Voice Memo */}
+                    {msg.mediaUrl && msg.mediaType === 'audio' && (
+                      <VoiceMemoPlayer
+                        audioUrl={msg.mediaUrl}
+                        durationSeconds={msg.audioDuration}
+                        isMe={isMe}
+                      />
+                    )}
+
+                    {/* Image / Video / File Attachment */}
+                    {msg.mediaUrl && msg.mediaType !== 'audio' && (
                       <div className={`mt-2 rounded-xl overflow-hidden border ${isMe ? 'border-neutral-700 bg-neutral-800' : 'border-neutral-200 bg-white'} shadow-xs`}>
                         {msg.mediaType === 'video' ? (
                           <video
@@ -491,6 +707,16 @@ export function PostChatPanel() {
           onChange={handleFileSelect}
         />
 
+        {/* Feature 2: Voice Memo Recorder */}
+        {isRecordingVoice && (
+          <div className="mb-2">
+            <VoiceMemoRecorder
+              onMemoReady={handleVoiceMemoReady}
+              onCancel={() => setIsRecordingVoice(false)}
+            />
+          </div>
+        )}
+
         <form
           onSubmit={handleSend}
           className="relative bg-neutral-50/90 hover:bg-neutral-50 border border-neutral-200/90 rounded-2xl p-2.5 transition-all focus-within:border-neutral-400 focus-within:bg-white shadow-xs"
@@ -533,7 +759,13 @@ export function PostChatPanel() {
             type="text"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            placeholder="Type feedback or reply to partner..."
+            placeholder={
+              chatMode === 'general'
+                ? 'Message studio team in #general...'
+                : activePost
+                  ? `Type feedback for "${activePost.title}"...`
+                  : 'Type message...'
+            }
             className="w-full bg-transparent text-xs text-neutral-900 placeholder:text-neutral-400 focus:outline-none px-1 pb-2 font-sans"
           />
 
@@ -563,17 +795,13 @@ export function PostChatPanel() {
               </button>
               <button
                 type="button"
-                title="Voice review confirmation"
-                onClick={() =>
-                  setInputText((prev) =>
-                    prev.includes('🎙️ Voice review confirmed.')
-                      ? prev
-                      : prev
-                        ? `${prev} 🎙️ Voice review confirmed.`
-                        : '🎙️ Voice review confirmed.'
-                  )
-                }
-                className="w-7 h-7 rounded-lg hover:bg-neutral-200/60 flex items-center justify-center transition-colors"
+                title={isRecordingVoice ? "Cancel Voice Memo" : "Record Voice Memo"}
+                onClick={() => setIsRecordingVoice(!isRecordingVoice)}
+                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                  isRecordingVoice
+                    ? 'bg-violet-600 text-white shadow-2xs'
+                    : 'hover:bg-neutral-200/60 text-neutral-500'
+                }`}
               >
                 <Mic className="w-3.5 h-3.5" />
               </button>

@@ -16,6 +16,7 @@ import {
   UserIcon,
   LogOut,
   Share2,
+  X,
 } from './icons/Hugeicons';
 
 export function TopBar() {
@@ -27,6 +28,7 @@ export function TopBar() {
     updateUserName,
     setUserAlias,
     getEffectiveUserName,
+    removeCollaborator,
   } = useAppContext();
   const { currentUser, roomId, sessionName, rooms, collaborators, activeUsers, customAliases } = state;
 
@@ -70,21 +72,15 @@ export function TopBar() {
     }
   }
 
-  const otherUsers = (activeUsers || []).filter((u) => u.uid !== currentUser?.uid);
-  const activeCollabList = [
-    ...Object.values(collaborators || {}),
-    ...otherUsers
-      .filter((u) => !collaborators[u.uid])
-      .map((u) => ({
-        uid: u.uid,
-        name: u.name,
-        color: '#2563eb',
-        role: 'client' as const,
-        x: 0,
-        y: 0,
-        lastSeen: Date.now(),
-      })),
-  ];
+  const now = Date.now();
+  // Only include genuine live collaborators seen within the last 6 seconds
+  const activeCollabList = Object.values(collaborators || {}).filter(
+    (c) =>
+      c.uid !== currentUser?.uid &&
+      now - (c.lastSeen || 0) < 6000 &&
+      !c.uid.toLowerCase().includes('7f2a') &&
+      !c.name?.toUpperCase().includes('7F2A')
+  );
 
   return (
     <header className="h-12 bg-white/90 backdrop-blur-xl border-b border-neutral-200/80 px-4 flex items-center justify-between z-40 shrink-0 gap-3 text-neutral-900 select-none">
@@ -241,7 +237,7 @@ export function TopBar() {
                           </span>
                         </div>
                         <p className="text-[10px] font-mono text-neutral-400">
-                          ID: #{(currentUser.uid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '').slice(-4).toUpperCase()}
+                          ID: #{((currentUser.uid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '').slice(-4) || 'USER').toUpperCase()}
                         </p>
                       </div>
                     </div>
@@ -258,7 +254,8 @@ export function TopBar() {
                   ) : (
                     activeCollabList.map((collab) => {
                       const effName = getEffectiveUserName(collab.uid, collab.name);
-                      const shortId = (collab.uid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '').slice(-4).toUpperCase();
+                      const cleanC = (collab.uid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '');
+                      const shortId = (cleanC.slice(-4) || 'USER').toUpperCase();
                       const hasAlias = Boolean(customAliases && customAliases[collab.uid]);
                       const isEditingThis = editingCollabUid === collab.uid;
 
@@ -291,19 +288,29 @@ export function TopBar() {
                             </div>
 
                             {!isEditingThis && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingCollabUid(collab.uid);
-                                  setCollabAliasInput(customAliases?.[collab.uid] || effName);
-                                }}
-                                className="px-2 py-1 rounded-lg text-[11px] font-semibold text-neutral-700 bg-neutral-100 hover:bg-neutral-200 transition-colors shrink-0 flex items-center gap-1"
-                              >
-                                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                  <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
-                                </svg>
-                                <span>{hasAlias ? 'Rename' : 'Give Name'}</span>
-                              </button>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingCollabUid(collab.uid);
+                                    setCollabAliasInput(customAliases?.[collab.uid] || effName);
+                                  }}
+                                  className="px-2 py-1 rounded-lg text-[11px] font-semibold text-neutral-700 bg-neutral-100 hover:bg-neutral-200 transition-colors flex items-center gap-1"
+                                >
+                                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                                  </svg>
+                                  <span>{hasAlias ? 'Rename' : 'Give Name'}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => removeCollaborator(collab.uid)}
+                                  className="w-6 h-6 rounded-lg text-neutral-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center transition-colors"
+                                  title="Dismiss inactive collaborator"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
                             )}
                           </div>
 

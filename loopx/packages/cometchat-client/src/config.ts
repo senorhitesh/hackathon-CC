@@ -14,9 +14,9 @@ export interface CometChatConfig {
  * Returns null if any required variable is missing (will trigger mock/sim mode).
  */
 export function getCometChatConfig(): CometChatConfig | null {
-  const appId = process.env.NEXT_PUBLIC_COMETCHAT_APP_ID;
-  const region = process.env.NEXT_PUBLIC_COMETCHAT_REGION;
-  const authKey = process.env.NEXT_PUBLIC_COMETCHAT_AUTH_KEY;
+  const appId = process.env.NEXT_PUBLIC_COMETCHAT_APP_ID?.trim();
+  const region = process.env.NEXT_PUBLIC_COMETCHAT_REGION?.trim();
+  const authKey = process.env.NEXT_PUBLIC_COMETCHAT_AUTH_KEY?.trim();
 
   if (!appId || !region || !authKey) {
     return null;

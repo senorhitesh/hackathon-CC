@@ -5,209 +5,214 @@ import Link from 'next/link';
 import {
   ArrowRight,
   ShieldCheck,
-  Share2,
-  MessageSquare,
   Zap,
-  Clock,
+  Sparkles,
+  MessageSquare,
+  Mic,
+  Layers,
+  CheckCircle2,
+  Share2,
 } from './components/icons/Hugeicons';
+import { IsometricHeroStage } from './components/landing/IsometricHeroStage';
+import { InteractivePinSandbox } from './components/landing/InteractivePinSandbox';
+import { IsometricFeaturesGrid } from './components/landing/IsometricFeaturesGrid';
+import { WorkflowSection } from './components/landing/WorkflowSection';
+import { ComparisonSection } from './components/landing/ComparisonSection';
+import { LandingCTA } from './components/landing/LandingCTA';
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-white text-neutral-900 font-sans selection:bg-black selection:text-white flex flex-col">
-      {/* ── Navigation Header ── */}
-      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-neutral-200 px-6 py-3.5 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <img
-            src="/loogx-logo&favicon.png"
-            alt="loopx logo"
-            className="w-7 h-7 rounded-lg object-contain shadow-xs"
-          />
-          <span className="font-semibold text-sm tracking-tight text-neutral-900">
-            loopx
-          </span>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Link
-            href="/app"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black hover:bg-neutral-800 text-white text-xs font-semibold shadow-xs transition-colors"
-          >
-            <span>Open Workspace</span>
-            <ArrowRight className="w-3 h-3" />
+    <div className="min-h-screen bg-[#09090b] text-neutral-100 font-sans selection:bg-cyan-400 selection:text-black flex flex-col antialiased">
+      {/* ── Sticky Frosted Glass Navigation Bar ── */}
+      <header className="sticky top-0 z-50 bg-[#09090b]/85 backdrop-blur-xl border-b border-white/10 px-6 py-3.5 transition-all">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          {/* Logo & Brand */}
+          <Link href="/" className="flex items-center gap-2.5 group">
+            <div className="relative">
+              <img
+                src="/loogx-logo&favicon.png"
+                alt="loopx logo"
+                className="w-7 h-7 rounded-lg object-contain shadow-xs group-hover:scale-105 transition-transform"
+              />
+              <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-black animate-pulse" />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="font-semibold text-sm tracking-tight text-white group-hover:text-cyan-400 transition-colors">
+                loopx
+              </span>
+              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-white/10 text-neutral-400">
+                v1.0
+              </span>
+            </div>
           </Link>
+
+          {/* Quick Nav Links */}
+          <nav className="hidden md:flex items-center gap-6 text-xs text-neutral-400 font-medium">
+            <a href="#hero-stage" className="hover:text-white transition-colors">
+              3D Canvas
+            </a>
+            <a href="#sandbox" className="hover:text-white transition-colors">
+              Interactive Pinning
+            </a>
+            <a href="#features" className="hover:text-white transition-colors">
+              Capabilities
+            </a>
+            <a href="#workflow" className="hover:text-white transition-colors">
+              Workflow
+            </a>
+            <a href="#comparison" className="hover:text-white transition-colors">
+              Why loopx
+            </a>
+          </nav>
+
+          {/* CTA Group */}
+          <div className="flex items-center gap-3">
+            <Link
+              href="/login"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-neutral-300 hover:text-white hover:bg-white/5 transition-all"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-neutral-400" />
+              <span>Sign In</span>
+            </Link>
+
+            <Link
+              href="/app"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white hover:bg-neutral-200 text-black text-xs font-semibold shadow-md transition-all active:scale-95 group"
+            >
+              <span>Launch Canvas</span>
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+            </Link>
+          </div>
         </div>
       </header>
 
-      {/* ── Hero Section ── */}
-      <section className="relative px-6 pt-20 pb-16 max-w-5xl mx-auto text-center">
-        {/* Subtle ambient lighting */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-80 bg-gradient-to-b from-neutral-200/50 via-neutral-100/20 to-transparent pointer-events-none -z-10 blur-3xl" />
+      {/* ── Hero Section with Isometric Centerpiece ── */}
+      <section id="hero-stage" className="relative px-6 pt-16 pb-12 max-w-6xl mx-auto text-center">
+        {/* Subtle Ambient Background Lighting */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-[420px] bg-gradient-to-b from-purple-600/15 via-cyan-600/10 to-transparent pointer-events-none -z-10 blur-3xl" />
 
-        {/* Subtle pill */}
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white border border-neutral-200/90 text-neutral-700 text-xs font-mono mb-6 shadow-2xs">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          <span>Realtime Creative Collaboration Engine</span>
+        {/* Realtime Announcement Pill */}
+        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/5 border border-white/10 text-neutral-300 text-xs font-mono mb-6 backdrop-blur-md shadow-inner">
+          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+          <span>Real-Time Creative Review Engine • CometChat v4</span>
         </div>
 
-        {/* Main Title with DM Serif Display */}
-        <h1 className="font-serif text-4xl sm:text-6xl lg:text-7xl font-normal tracking-tight text-neutral-950 leading-[1.05] max-w-3xl mx-auto">
-          Collaborate on creative ads on an infinite visual canvas.
+        {/* Hero Title */}
+        <h1 className="font-serif text-4xl sm:text-6xl lg:text-7xl font-normal tracking-tight text-white leading-[1.08] max-w-4xl mx-auto">
+          Collaborate on creative ads on an infinite isometric canvas.
         </h1>
 
-        {/* Subtitle */}
-        <p className="mt-5 text-sm sm:text-base text-neutral-600 max-w-xl mx-auto leading-relaxed font-sans">
-          Connect your creative post variations directly to CometChat review threads on an infinite dot-grid canvas. Share instant collaborative links with clients.
+        {/* Hero Subtitle */}
+        <p className="mt-5 text-sm sm:text-base text-neutral-400 max-w-2xl mx-auto leading-relaxed font-sans">
+          Review multi-format ad variations, drop sub-pixel pin annotations, and hop into zero-latency voice huddles—all connected directly to CometChat review threads on an infinite visual plane.
         </p>
 
-        {/* Action Buttons */}
+        {/* Primary Action Buttons */}
         <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
           <Link
             href="/app"
-            className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-black hover:bg-neutral-800 text-white text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-all active:scale-95"
+            className="w-full sm:w-auto px-7 py-3 rounded-xl bg-gradient-to-r from-cyan-400 via-teal-300 to-indigo-400 text-black text-xs font-bold shadow-[0_0_25px_-5px_rgba(6,182,212,0.4)] flex items-center justify-center gap-2 transition-all hover:opacity-95 active:scale-95 group"
           >
-            <span>Launch Canvas</span>
-            <ArrowRight className="w-3.5 h-3.5" />
+            <span>Launch Canvas Free</span>
+            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
           </Link>
+
           <Link
             href="/login"
-            className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-white border border-neutral-200/90 hover:border-neutral-300 hover:bg-neutral-50 text-neutral-800 text-xs font-medium transition-all flex items-center justify-center gap-2 shadow-2xs active:scale-95"
+            className="w-full sm:w-auto px-7 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-white text-xs font-medium transition-all flex items-center justify-center gap-2 backdrop-blur-md active:scale-95"
           >
-            <ShieldCheck className="w-3.5 h-3.5 text-neutral-500" />
+            <ShieldCheck className="w-3.5 h-3.5 text-neutral-400" />
             <span>Sign in with Google / Email</span>
           </Link>
         </div>
 
-        {/* Hero Visual Mockup on Dot Canvas */}
-        <div className="mt-14 rounded-2xl border border-neutral-200/90 bg-neutral-50 p-4 shadow-[0_16px_50px_-8px_rgba(15,23,42,0.12)] overflow-hidden dot-canvas relative text-left">
-          <div className="rounded-xl border border-neutral-200/80 bg-white/95 backdrop-blur-md p-6 shadow-xs">
-            <div className="flex items-center justify-between mb-4 border-b border-neutral-100 pb-3">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                <span className="text-xs font-mono text-neutral-700 font-medium">
-                  main-studio-workspace / live sync
-                </span>
-              </div>
-              <span className="text-[11px] font-mono text-neutral-500">
-                Canvas zoom: 100% (Ctrl+ / -)
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Post Node Preview */}
-              <div className="rounded-xl border border-neutral-200 bg-white p-4 space-y-3 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-neutral-100 border border-neutral-200 text-neutral-600">
-                    IG 1:1 SQUARE
-                  </span>
-                  <span className="flex items-center gap-1 text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
-                    <Clock className="w-3 h-3 text-blue-600" />
-                    In Review
-                  </span>
-                </div>
-                <div className="aspect-square rounded-lg bg-neutral-100 border border-neutral-200 overflow-hidden flex items-center justify-center relative">
-                  <img
-                    src="/default-card.png"
-                    alt="Creative Ad"
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute top-4 left-4 w-5 h-5 rounded-full bg-black text-white font-mono font-bold text-[10px] flex items-center justify-center shadow-md">
-                    1
-                  </div>
-                </div>
-                <p className="text-xs text-neutral-700 leading-snug font-medium">
-                  Summer Campaign Hero Variation #1
-                </p>
-              </div>
-
-              {/* CometChat Node Preview */}
-              <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 space-y-3 flex flex-col justify-between shadow-sm">
-                <div>
-                  <div className="flex items-center justify-between pb-2 border-b border-neutral-200">
-                    <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded bg-black text-white flex items-center justify-center">
-                        <MessageSquare className="w-3 h-3" />
-                      </div>
-                      <span className="text-xs font-semibold text-neutral-900">
-                        CometChat Review Thread
-                      </span>
-                    </div>
-                    <span className="text-[10px] font-mono text-emerald-600 font-medium">Connected</span>
-                  </div>
-
-                  <div className="space-y-2 mt-3 text-xs">
-                    <div className="p-2.5 rounded-lg border border-neutral-200 bg-white text-neutral-800 shadow-2xs">
-                      <div className="flex justify-between text-[10px] font-mono text-neutral-400 mb-0.5">
-                        <span className="font-semibold text-neutral-700">Creative Lead</span>
-                        <span>Owner</span>
-                      </div>
-                      <p className="text-[11px]">Pin #1: Let&apos;s bump the contrast on the headline text.</p>
-                    </div>
-
-                    <div className="p-2.5 rounded-lg border border-neutral-200 bg-neutral-100/80 text-neutral-800">
-                      <div className="flex justify-between text-[10px] font-mono text-neutral-400 mb-0.5">
-                        <span className="font-semibold text-neutral-700">Client Reviewer</span>
-                        <span>Client</span>
-                      </div>
-                      <p className="text-[11px]">Agreed! Once adjusted, we can mark this approved.</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-neutral-200 flex items-center gap-1.5 text-xs text-neutral-500 font-mono">
-                  <Zap className="w-3.5 h-3.5 text-neutral-700" />
-                  <span>Real-time sync via CometChat</span>
-                </div>
-              </div>
-            </div>
+        {/* Social Proof / Metrics Row */}
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-8 text-xs font-mono text-neutral-400">
+          <div className="flex items-center gap-2">
+            <span className="text-cyan-400">✦</span>
+            <span>3x Faster Client Sign-Off</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-purple-400">✦</span>
+            <span>Zero Vague Email Comments</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-emerald-400">✦</span>
+            <span>Live CometChat Audio &amp; Chat Sync</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-amber-400">✦</span>
+            <span>100% Lossless Spatial Zoom</span>
           </div>
         </div>
+
+        {/* ── THE ISOMETRIC 3D ILLUSTRATION HERO CENTERPIECE ── */}
+        <IsometricHeroStage />
       </section>
 
-      {/* ── Feature Strip ── */}
-      <section className="max-w-5xl mx-auto px-6 py-16 grid grid-cols-1 sm:grid-cols-3 gap-4 border-t border-neutral-200/80">
-        <div className="p-6 rounded-2xl border border-neutral-200/80 bg-white/90 hover:bg-white hover:border-neutral-300 shadow-[0_2px_12px_-2px_rgba(15,23,42,0.04)] hover:shadow-[0_12px_28px_-6px_rgba(15,23,42,0.08)] transition-all space-y-3 group">
-          <div className="w-9 h-9 rounded-xl bg-neutral-100 flex items-center justify-center text-neutral-900 group-hover:bg-neutral-900 group-hover:text-white transition-colors">
-            <Share2 className="w-4 h-4" />
-          </div>
-          <h3 className="text-sm font-semibold text-neutral-900 tracking-tight">Sharable Collaboration</h3>
-          <p className="text-xs text-neutral-500 leading-relaxed font-sans">
-            Generate instant shareable links for client review. Anyone with the URL joins the canvas with live presence.
-          </p>
-        </div>
-
-        <div className="p-6 rounded-2xl border border-neutral-200/80 bg-white/90 hover:bg-white hover:border-neutral-300 shadow-[0_2px_12px_-2px_rgba(15,23,42,0.04)] hover:shadow-[0_12px_28px_-6px_rgba(15,23,42,0.08)] transition-all space-y-3 group">
-          <div className="w-9 h-9 rounded-xl bg-neutral-100 flex items-center justify-center text-neutral-900 group-hover:bg-neutral-900 group-hover:text-white transition-colors">
-            <Zap className="w-4 h-4" />
-          </div>
-          <h3 className="text-sm font-semibold text-neutral-900 tracking-tight">Canvas-Only Zoom</h3>
-          <p className="text-xs text-neutral-500 leading-relaxed font-sans">
-            Press Ctrl+ and Ctrl- or pinch-zoom to scale the canvas viewport from 25% to 300% without scaling browser text.
-          </p>
-        </div>
-
-        <div className="p-6 rounded-2xl border border-neutral-200/80 bg-white/90 hover:bg-white hover:border-neutral-300 shadow-[0_2px_12px_-2px_rgba(15,23,42,0.04)] hover:shadow-[0_12px_28px_-6px_rgba(15,23,42,0.08)] transition-all space-y-3 group">
-          <div className="w-9 h-9 rounded-xl bg-neutral-100 flex items-center justify-center text-neutral-900 group-hover:bg-neutral-900 group-hover:text-white transition-colors">
-            <ShieldCheck className="w-4 h-4" />
-          </div>
-          <h3 className="text-sm font-semibold text-neutral-900 tracking-tight">Google & Email Auth</h3>
-          <p className="text-xs text-neutral-500 leading-relaxed font-sans">
-            Sign in with your Google account via OAuth or email and password. Sessions sync seamlessly across all workspaces.
-          </p>
-        </div>
+      {/* ── Interactive Pinning Playground ── */}
+      <section id="sandbox">
+        <InteractivePinSandbox />
       </section>
 
-      {/* ── Footer ── */}
-      <footer className="mt-auto border-t border-neutral-200/80 py-6 px-6 text-center text-xs font-mono text-neutral-500 flex items-center justify-between max-w-5xl mx-auto w-full">
-        <div className="flex items-center gap-2">
-          <img
-            src="/loogx-logo&favicon.png"
-            alt="loopx logo"
-            className="w-5 h-5 rounded-md object-contain"
-          />
-          <span className="text-neutral-900 font-sans font-semibold">loopx</span>
-          <span className="text-[10px] text-neutral-400 font-mono">v1.0</span>
+      {/* ── Core Capabilities Grid ── */}
+      <section id="features">
+        <IsometricFeaturesGrid />
+      </section>
+
+      {/* ── Step-by-Step Workflow ── */}
+      <section id="workflow">
+        <WorkflowSection />
+      </section>
+
+      {/* ── Comparison Section ── */}
+      <section id="comparison">
+        <ComparisonSection />
+      </section>
+
+      {/* ── High-Impact Bottom CTA ── */}
+      <LandingCTA />
+
+      {/* ── Polished Dark Studio Footer ── */}
+      <footer className="mt-auto border-t border-neutral-800/80 py-10 px-6 bg-[#060608]">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex items-center gap-3">
+            <img
+              src="/loogx-logo&favicon.png"
+              alt="loopx logo"
+              className="w-6 h-6 rounded-md object-contain"
+            />
+            <span className="text-white font-sans font-semibold text-sm">loopx</span>
+            <span className="text-[10px] text-neutral-400 font-mono px-2 py-0.5 rounded bg-white/5 border border-white/10">
+              v1.0 Production
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-neutral-400">
+            <Link href="/app" className="hover:text-white transition-colors">
+              Workspace Canvas
+            </Link>
+            <Link href="/login" className="hover:text-white transition-colors">
+              Sign In
+            </Link>
+            <a
+              href="https://www.cometchat.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-cyan-400 transition-colors flex items-center gap-1"
+            >
+              <span>Powered by CometChat</span>
+            </a>
+            <span className="text-neutral-600">•</span>
+            <span className="font-mono text-[11px] text-neutral-500">
+              Hotkeys: (P) Pin Mode • (C) Center Canvas
+            </span>
+          </div>
+
+          <div className="text-neutral-500 text-xs font-mono">
+            © 2026 loopx Studio Inc. All rights reserved.
+          </div>
         </div>
-        <span className="text-neutral-400 text-[11px]">Real-Time Creative Review Engine</span>
       </footer>
     </div>
   );

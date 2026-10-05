@@ -41,7 +41,7 @@ export function PostChatPanel() {
   const [isMinimized, setIsMinimized] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
-  const [chatMode, setChatMode] = useState<'general' | 'frame'>('frame');
+  const [chatMode, setChatMode] = useState<'general' | 'frame'>('general');
   const [selectedMedia, setSelectedMedia] = useState<{
     file: File;
     previewUrl: string;
@@ -64,11 +64,11 @@ export function PostChatPanel() {
   // When activePostId changes (user selected a frame on canvas), auto-switch to frame mode
   const prevActivePostIdRef = useRef(activePostId);
   useEffect(() => {
-    if (activePostId && activePostId !== prevActivePostIdRef.current) {
+    if (activePostId && posts.some((p) => p.id === activePostId) && activePostId !== prevActivePostIdRef.current) {
       setChatMode('frame');
     }
     prevActivePostIdRef.current = activePostId;
-  }, [activePostId]);
+  }, [activePostId, posts]);
 
   // Derive clean ID-based display name for current user
   const cleanMyUid = (currentUser.uid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '');
@@ -79,16 +79,16 @@ export function PostChatPanel() {
     ? currentUser.name
     : `User #${myShortId}`;
 
-  // Mode-based message streams
+  // Mode-based message streams: Include unmapped or cross-browser post messages in general stream so nothing is hidden
   const generalMessages = chatMessages.filter(
-    (m) => m.postId === 'general' || m.postId === state.roomId || !m.postId
+    (m) => m.postId === 'general' || m.postId === state.roomId || !m.postId || !posts.some((p) => p.id === m.postId)
   );
   const frameMessages = selectedFramePostId
     ? chatMessages.filter((m) => m.postId === selectedFramePostId)
     : [];
 
-  const postMessages = chatMode === 'general' ? generalMessages : frameMessages;
-  const currentPostId = chatMode === 'general' ? 'general' : (selectedFramePostId || 'general');
+  const postMessages = (chatMode === 'general' || !selectedFramePostId) ? generalMessages : frameMessages;
+  const currentPostId = (chatMode === 'general' || !selectedFramePostId) ? 'general' : (selectedFramePostId || 'general');
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -154,15 +154,26 @@ export function PostChatPanel() {
   }
 
   async function handleVoiceMemoReady(audioBlob: Blob, durationSeconds: number) {
-    const audioUrl = URL.createObjectURL(audioBlob);
     setIsSending(true);
     try {
-      await sendMessage('', currentPostId || undefined, {
-        file: audioBlob,
-        url: audioUrl,
-        name: `voice-memo-${Date.now()}.webm`,
+      // 1. Convert to Base64 Data URL for instant, universal playback across all tabs, windows & peers
+      const reader = new FileReader();
+      const dataUrl = await new Promise<string>((resolve) => {
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(audioBlob);
+      });
+
+      // 2. Wrap into a File instance with explicit filename and mime
+      const ext = audioBlob.type.includes('mp4') ? 'mp4' : audioBlob.type.includes('ogg') ? 'ogg' : 'webm';
+      const fileName = `voice-memo-${Date.now()}.${ext}`;
+      const audioFile = new File([audioBlob], fileName, { type: audioBlob.type || 'audio/webm' });
+
+      await sendMessage('🎙️ Voice memo', currentPostId || undefined, {
+        file: audioFile,
+        url: dataUrl,
+        name: fileName,
         type: 'audio',
-        audioDuration: durationSeconds,
+        audioDuration: Math.max(1, durationSeconds),
       });
     } catch (err) {
       console.warn('[loopx] Send voice memo failed:', err);
@@ -217,6 +228,16 @@ export function PostChatPanel() {
         </div>
 
         <div className="flex items-center gap-2">
+          {chatMessages.length > 0 && (
+            <button
+              type="button"
+              onClick={() => clearChatMessages()}
+              title="Start Fresh (Clear all messages)"
+              className="px-2 py-0.5 rounded-full bg-neutral-100 hover:bg-red-50 text-neutral-500 hover:text-red-600 flex items-center gap-1 transition-colors text-[10px] font-medium border border-neutral-200/80"
+            >
+              <span>Fresh Chat</span>
+            </button>
+          )}
           <button
             onClick={() => dispatch({ type: 'TOGGLE_MODAL', modal: 'isCreatePostOpen', value: true })}
             title="New Ad Creative"

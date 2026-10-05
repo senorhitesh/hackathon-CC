@@ -34,24 +34,6 @@ export function LeftSidebar() {
   } = state;
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
 
-  // Real active collaborators list (seen within 6s)
-  const now = Date.now();
-  const activeCollabList = Object.values(collaborators || {}).filter(
-    (c) =>
-      c.uid !== currentUser?.uid &&
-      now - (c.lastSeen || 0) < 6000 &&
-      !c.uid.toLowerCase().includes('7f2a') &&
-      !c.name?.toUpperCase().includes('7F2A')
-  );
-  const totalOtherCount = activeCollabList.length;
-
-  const getAvatarColor = (name: string) => {
-    const colors = ['bg-indigo-500', 'bg-violet-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500', 'bg-sky-500'];
-    let hash = 0;
-    for (let i = 0; i < (name || '').length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    return colors[Math.abs(hash) % colors.length];
-  };
-
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'APPROVED':
@@ -282,42 +264,6 @@ export function LeftSidebar() {
               )}
               <span>{isInCall ? 'In Huddle' : 'Live Huddle'}</span>
             </button>
-          </div>
-
-          {/* Reviewers Active Presence Bar */}
-          <div className="p-2 rounded-xl bg-white border border-neutral-200/80 flex items-center justify-between shadow-2xs">
-            <div className="flex items-center gap-1.5">
-              <div className="flex -space-x-1.5">
-                <div
-                  className={`w-5 h-5 rounded-full border border-white ${getAvatarColor(currentUser?.name || 'You')} text-white text-[9px] font-bold flex items-center justify-center shadow-xs`}
-                  title={`${currentUser?.name || 'You'} (You)`}
-                >
-                  {(currentUser?.name || 'Y').charAt(0).toUpperCase()}
-                </div>
-                {activeCollabList.slice(0, 3).map((u) => {
-                  const effName = state.customAliases?.[u.uid] || u.name;
-                  return (
-                    <div
-                      key={u.uid}
-                      className={`w-5 h-5 rounded-full border border-white ${getAvatarColor(effName)} text-white text-[9px] font-bold flex items-center justify-center shadow-xs`}
-                      title={effName}
-                    >
-                      {(effName || 'C').charAt(0).toUpperCase()}
-                    </div>
-                  );
-                })}
-              </div>
-              <span className="text-[11px] text-neutral-600 font-medium">
-                {totalOtherCount > 0
-                  ? `${totalOtherCount + 1} Collaborators`
-                  : 'Solo (You)'}
-              </span>
-            </div>
-
-            <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200 font-semibold">
-              <span className="w-1 h-1 rounded-full bg-emerald-500 animate-ping" />
-              Synced
-            </span>
           </div>
         </div>
       </div>

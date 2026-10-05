@@ -126,13 +126,8 @@ export function CanvasWorkspace() {
 
   // Real-time synchronization of open chat nodes and positions across collaborator tabs
   useEffect(() => {
-    if (typeof BroadcastChannel === 'undefined') return;
-    const channel = new BroadcastChannel(`canvas_collab_${state.roomId}`);
-
-    channel.onmessage = (event) => {
-      const payload = event.data;
+    const handleSyncPayload = (payload: any) => {
       if (!payload || payload.senderUid === currentUser.uid) return;
-
       if (payload.type === 'canvas_sync') {
         if (payload.event === 'CHAT_NODE_TOGGLED') {
           setOpenChatNodes((prev) => ({
@@ -148,8 +143,30 @@ export function CanvasWorkspace() {
       }
     };
 
+    // Cross-browser CometChat sync event listener
+    const handleRemoteEvent = (e: Event) => {
+      handleSyncPayload((e as CustomEvent).detail);
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('loopx_canvas_sync', handleRemoteEvent);
+    }
+
+    // Same-origin BroadcastChannel listener
+    let channel: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== 'undefined') {
+      channel = new BroadcastChannel(`canvas_collab_${state.roomId}`);
+      channel.onmessage = (event) => {
+        handleSyncPayload(event.data);
+      };
+    }
+
     return () => {
-      channel.close();
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('loopx_canvas_sync', handleRemoteEvent);
+      }
+      if (channel) {
+        channel.close();
+      }
     };
   }, [state.roomId, currentUser.uid]);
 
@@ -288,17 +305,29 @@ export function CanvasWorkspace() {
     setIsPanning(false);
     if (draggingTarget && draggingTarget.type === 'chat') {
       const pos = chatNodePositions[draggingTarget.id];
-      if (pos && typeof BroadcastChannel !== 'undefined') {
-        const bc = new BroadcastChannel(`canvas_collab_${state.roomId}`);
-        bc.postMessage({
-          type: 'canvas_sync',
-          event: 'CHAT_NODE_MOVED',
-          senderUid: currentUser.uid,
-          postId: draggingTarget.id,
-          x: pos.x,
-          y: pos.y,
-        });
-        bc.close();
+      if (pos) {
+        if (typeof BroadcastChannel !== 'undefined') {
+          const bc = new BroadcastChannel(`canvas_collab_${state.roomId}`);
+          bc.postMessage({
+            type: 'canvas_sync',
+            event: 'CHAT_NODE_MOVED',
+            senderUid: currentUser.uid,
+            postId: draggingTarget.id,
+            x: pos.x,
+            y: pos.y,
+          });
+          bc.close();
+        }
+        import('@repo/cometchat-client').then(({ sendCollabSyncMessage }) => {
+          sendCollabSyncMessage(state.roomId, {
+            type: 'canvas_sync',
+            event: 'CHAT_NODE_MOVED',
+            senderUid: currentUser.uid,
+            postId: draggingTarget.id,
+            x: pos.x,
+            y: pos.y,
+          }).catch(() => {});
+        }).catch(() => {});
       }
     }
     setDraggingTarget(null);
@@ -346,6 +375,15 @@ export function CanvasWorkspace() {
       });
       bc.close();
     }
+    import('@repo/cometchat-client').then(({ sendCollabSyncMessage }) => {
+      sendCollabSyncMessage(state.roomId, {
+        type: 'canvas_sync',
+        event: 'CHAT_NODE_TOGGLED',
+        senderUid: currentUser.uid,
+        postId,
+        isOpen: newState,
+      }).catch(() => {});
+    }).catch(() => {});
   }
 
 

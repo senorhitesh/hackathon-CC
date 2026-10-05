@@ -5,6 +5,7 @@ export {
   // Initialization
   initCometChat,
   isMockMode,
+  getSDK,
   // Auth
   loginUser,
   logoutUser,
@@ -13,6 +14,8 @@ export {
   resolveAnnotation,
   reopenAnnotation,
   // Real-time listeners & Messaging
+  addConnectionListener,
+  getConnectionStatus,
   addAnnotationListener,
   addPresenceListener,
   sendCometChatMessage,

@@ -68,21 +68,37 @@ export function VoiceMemoRecorder({ onMemoReady, onCancel }: VoiceMemoRecorderPr
       }
       drawWaveform();
 
-      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      let mimeType = 'audio/webm';
+      if (typeof MediaRecorder !== 'undefined') {
+        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+          mimeType = 'audio/webm;codecs=opus';
+        } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+          mimeType = 'audio/webm';
+        } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+          mimeType = 'audio/mp4';
+        } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
+          mimeType = 'audio/ogg';
+        } else {
+          mimeType = '';
+        }
+      }
+
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       chunksRef.current = [];
       recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
+        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
       };
       recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const recordedType = recorder.mimeType || mimeType || 'audio/webm';
+        const blob = new Blob(chunksRef.current, { type: recordedType });
         const url = URL.createObjectURL(blob);
         const dur = (Date.now() - startTimeRef.current) / 1000;
         setAudioBlob(blob);
         setAudioUrl(url);
-        setAudioDuration(Math.round(dur));
+        setAudioDuration(Math.max(1, Math.round(dur)));
         // stop all tracks
         stream.getTracks().forEach((t) => t.stop());
-        audioCtx.close();
+        try { audioCtx.close(); } catch (_) {}
       };
 
       mediaRecorderRef.current = recorder;
@@ -227,14 +243,24 @@ export function VoiceMemoPlayer({ audioUrl, durationSeconds, isMe }: VoiceMemoPl
   useEffect(() => {
     const audio = new Audio(audioUrl);
     audioRef.current = audio;
-    audio.onloadedmetadata = () => setDuration(audio.duration);
+    audio.onloadedmetadata = () => {
+      const d = audio.duration;
+      if (Number.isFinite(d) && d > 0) {
+        setDuration(d);
+      } else if (durationSeconds && durationSeconds > 0) {
+        setDuration(durationSeconds);
+      }
+    };
     audio.ontimeupdate = () => {
       setCurrentTime(audio.currentTime);
-      setProgress(audio.duration ? (audio.currentTime / audio.duration) * 100 : 0);
+      const total = Number.isFinite(audio.duration) && audio.duration > 0
+        ? audio.duration
+        : (durationSeconds && durationSeconds > 0 ? durationSeconds : 1);
+      setProgress(Math.min(100, (audio.currentTime / total) * 100));
     };
     audio.onended = () => { setIsPlaying(false); setProgress(0); setCurrentTime(0); };
     return () => { audio.pause(); audio.src = ''; };
-  }, [audioUrl]);
+  }, [audioUrl, durationSeconds]);
 
   function togglePlay() {
     if (!audioRef.current) return;

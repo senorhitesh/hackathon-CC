@@ -21,19 +21,21 @@ export function useCometChat() {
   const initialized = useRef(false);
   const cleanupRef = useRef<(() => void)[]>([]);
   const currentRoomRef = useRef(state.roomId);
+  const postsRef = useRef(state.posts);
 
-  // Keep room ref in sync
+  // Keep room and posts refs in sync
   useEffect(() => {
     currentRoomRef.current = state.roomId;
-  }, [state.roomId]);
+    postsRef.current = state.posts;
+  }, [state.roomId, state.posts]);
 
   // ─── Helper: Map CometChat SDK message → our ChatMessage ───────────────────
   const mapSdkMessage = useCallback(
     (msg: any): ChatMessage | null => {
       try {
         const msgType = (msg.getType?.() || msg.type || '').toLowerCase();
-        // Text or media messages
-        if (msgType === 'text' || msgType === 'image' || msgType === 'video' || msgType === 'file' || msgType === 'media') {
+        // Text, media or audio messages
+        if (msgType === 'text' || msgType === 'image' || msgType === 'video' || msgType === 'file' || msgType === 'media' || msgType === 'audio') {
           const senderUid = msg.getSender?.()?.getUid?.() || msg.sender?.uid || msg.senderUid || '';
           const rawName = msg.getSender?.()?.getName?.() || msg.sender?.name || msg.senderName;
           const cleanSender = (senderUid || '').replace(/^(user_|usr_|collab_|client_|owner_)/i, '');
@@ -54,7 +56,7 @@ export function useCometChat() {
               meta = JSON.parse(meta);
             } catch (_) {}
           }
-          const postId = meta?.postId || receiverId || 'general';
+          const postId = meta?.postId || (receiverId === currentRoomRef.current ? 'general' : receiverId) || 'general';
 
           // Extract media cloud URL and attachment metadata
           const rawUrl =
@@ -79,7 +81,8 @@ export function useCometChat() {
           const text = rawCaption || '';
           const mediaUrl = rawUrl;
           const mediaName = rawFileName;
-          const mediaType = meta?.mediaType || (msgType === 'video' ? 'video' : 'image');
+          const mediaType = meta?.mediaType || (msgType === 'video' ? 'video' : msgType === 'audio' ? 'audio' : 'image');
+          const audioDuration = meta?.audioDuration || meta?.duration;
 
           if (!text && !mediaUrl) return null;
 
@@ -94,6 +97,7 @@ export function useCometChat() {
             mediaUrl,
             mediaName,
             mediaType,
+            audioDuration,
           };
         }
         return null;
@@ -105,14 +109,33 @@ export function useCometChat() {
   );
 
   // ─── Main Initialization Effect ────────────────────────────────────────────
+  const isMountedRef = useRef(true);
+  const isInitializingRef = useRef(false);
+  const activeEffectIdRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (initialized.current) return;
-    initialized.current = true;
+    isMountedRef.current = true;
+    const effectId = Math.random().toString(36).substring(2, 8);
+    activeEffectIdRef.current = effectId;
+    let isCurrent = true;
 
     async function init() {
+      if (isInitializingRef.current) {
+        console.info('[loopx] Init already in progress, awaiting resolution...');
+      }
+      isInitializingRef.current = true;
+
+      // Clean up previous listeners if any exist
+      cleanupRef.current.forEach((fn) => {
+        try { fn(); } catch (_) {}
+      });
+      cleanupRef.current = [];
+
       const {
         initCometChat,
         initCometChatCalls,
+        addConnectionListener,
+        getConnectionStatus,
         createOrGetUser,
         getOrCreateGroup,
         fetchCometChatMessageHistory,
@@ -127,12 +150,30 @@ export function useCometChat() {
         initMockBroadcast,
       } = await import('@repo/cometchat-client');
 
+      if (!isCurrent || activeEffectIdRef.current !== effectId) return;
+
       // ── Step 1: Init Chat SDK ──────────────────────────────────────────────
       const chatReady = await initCometChat();
       console.info('[loopx] CometChat SDK initialized. Live mode:', chatReady);
 
+      if (!isCurrent || activeEffectIdRef.current !== effectId) return;
+
+      // ── Step 1.5: Connection Listener for live visibility ──────────────────
+      const connCleanup = await addConnectionListener(`loopx_conn_${currentRoomRef.current}_${effectId}`, {
+        inConnecting: () => console.log('[loopx] 🔌 CometChat Socket: CONNECTING...'),
+        onConnected: () => console.log('[loopx] 🟢 CometChat Socket: CONNECTED ✓'),
+        onDisconnected: () => console.warn('[loopx] 🔴 CometChat Socket: DISCONNECTED ✗'),
+        onConnectionError: (e: any) => console.error('[loopx] ⚠️ CometChat Socket: ERROR', e),
+      });
+      cleanupRef.current.push(connCleanup);
+
+      const currentStatus = await getConnectionStatus();
+      console.info('[loopx] CometChat connection status:', currentStatus);
+
       // ── Step 2: Init Calls SDK ─────────────────────────────────────────────
       await initCometChatCalls();
+
+      if (!isCurrent || activeEffectIdRef.current !== effectId) return;
 
       // ── Step 3: Login / Create User ────────────────────────────────────────
       let loggedInUser: { uid: string; name: string };
@@ -147,10 +188,37 @@ export function useCometChat() {
         if (!userUid || userUid === 'usr_init' || userUid.toLowerCase().includes('7f2a') || userName?.toUpperCase().includes('7F2A')) {
           const freshShortId = Math.random().toString(36).substring(2, 6).toUpperCase();
           userUid = `usr_${freshShortId.toLowerCase()}`;
-          userName = `User #${freshShortId}`;
+          userName = `User ${freshShortId}`;
         }
-        loggedInUser = await createOrGetUser(userUid, userName);
+        // Sanitize UID (letters, numbers, underscores only) and clean userName (no hash)
+        userUid = userUid.replace(/[^a-zA-Z0-9_-]/g, '_');
+        userName = (userName || 'Studio User').replace(/[#]/g, '').trim() || 'Studio User';
+
+        try {
+          loggedInUser = await createOrGetUser(userUid, userName);
+        } catch (authErr: any) {
+          console.error(
+            '[loopx] ❌ CometChat createOrGetUser failed:',
+            authErr?.code,
+            authErr?.message,
+            JSON.stringify(authErr?.details || authErr),
+          );
+          dispatch({
+            type: 'SET_USER',
+            user: {
+              ...state.currentUser,
+              uid: userUid,
+              name: userName,
+              status: 'ONLINE',
+              isLoggedIn: true,
+            },
+          });
+          isInitializingRef.current = false;
+          return;
+        }
       }
+
+      if (!isCurrent || activeEffectIdRef.current !== effectId) return;
 
       // Update state with authenticated user
       dispatch({
@@ -172,49 +240,29 @@ export function useCometChat() {
       // ── Step 4: Create/Join CometChat Group for Room ───────────────────────
       const roomId = currentRoomRef.current;
       const group = await getOrCreateGroup(roomId, state.sessionName || 'Creative Workspace');
-      console.info('[loopx] CometChat group ready:', roomId, group ? '✓' : '✗');
+      console.info(
+        '[loopx] 🟢 CometChat group joined & ready:',
+        roomId,
+        'group:',
+        group?.getGuid?.() || group?.name || roomId,
+      );
 
-      // Note: CometChat group members are historical participants; real-time presence
-      // is managed dynamically via CometChat UserListener (addPresenceListener) and BroadcastChannel
-      // to ensure closed/inactive tabs are not shown as active collaborators.
-
-      // ── Step 5: Fetch Message History ──────────────────────────────────────
-      if (!isMockMode()) {
-        try {
-          const history = await fetchCometChatMessageHistory(roomId, 50);
-          if (history && history.length > 0) {
-            const mapped: ChatMessage[] = [];
-            for (const msg of history) {
-              const chatMsg = mapSdkMessage(msg);
-              if (
-                chatMsg &&
-                !chatMsg.text.toLowerCase().includes('testing cometchat integration live message') &&
-                !chatMsg.text.toLowerCase().includes('voice review confirmed. 🎙️ voice review confirmed')
-              ) {
-                mapped.push(chatMsg);
-              }
-            }
-            if (mapped.length > 0) {
-              dispatch({ type: 'SET_CHAT_MESSAGES', messages: mapped });
-              console.info(`[loopx] Loaded ${mapped.length} messages from CometChat history.`);
-            }
-          }
-        } catch (err) {
-          console.warn('[loopx] Failed to fetch message history:', err);
-        }
-      }
+      if (!isCurrent || activeEffectIdRef.current !== effectId) return;
 
       // ── Step 6: Real-time Message Listener ─────────────────────────────────
-      const messageListenerId = `loopx_chat_${roomId}`;
+      const messageListenerId = `loopx_chat_${roomId}_${effectId}`;
       const cleanupMessages = await addCometChatMessageListener(
         messageListenerId,
         (message: any) => {
           // Skip our own messages (already dispatched locally)
           const senderUid = message.getSender?.()?.getUid?.() || message.sender?.uid || '';
-          if (senderUid === loggedInUser.uid) return;
+          if (senderUid && senderUid.toLowerCase() === loggedInUser.uid.toLowerCase()) {
+            return;
+          }
 
           const chatMsg = mapSdkMessage(message);
           if (chatMsg) {
+            console.log('[loopx] 📩 Incoming CometChat message received:', chatMsg.text, 'from:', chatMsg.senderName);
             dispatch({ type: 'ADD_CHAT_MESSAGE', message: chatMsg });
           }
         },
@@ -222,7 +270,7 @@ export function useCometChat() {
       cleanupRef.current.push(cleanupMessages);
 
       // ── Step 7: Annotation Listener ────────────────────────────────────────
-      const annotationListenerId = `loopx_annotations_${roomId}`;
+      const annotationListenerId = `loopx_annotations_${roomId}_${effectId}`;
       const cleanupAnnotations = await addAnnotationListener(annotationListenerId, {
         onAnnotationCreated: (annotation: PinAnnotation) => {
           dispatch({ type: 'ADD_ANNOTATION', annotation });
@@ -246,7 +294,8 @@ export function useCometChat() {
         const cleanupMock = initMockBroadcast();
         cleanupRef.current.push(cleanupMock);
       } else {
-        const cleanupPresence = await addPresenceListener(`presence_${roomId}`, {
+        const presenceListenerId = `presence_${roomId}_${effectId}`;
+        const cleanupPresence = await addPresenceListener(presenceListenerId, {
           onUserOnline: (uid, name) => {
             if (uid.toLowerCase().includes('7f2a') || uid === 'usr_init' || name?.toUpperCase().includes('7F2A')) return;
             dispatch({ type: 'USER_JOINED', user: { uid, name, status: 'ONLINE' } });
@@ -272,15 +321,15 @@ export function useCometChat() {
       }
 
       // ── Step 9: CometChat Real-Time Presence & Canvas Collaboration Bridge ─
-      // Connects normal tabs, incognito tabs, and remote collaborators across the internet
-      const collabListenerId = `loopx_collab_${roomId}`;
+      // Connects normal tabs, incognito tabs, and remote collaborators across different browsers/devices
+      const collabListenerId = `loopx_collab_${roomId}_${effectId}`;
       const cleanupCollab = await addCollabSyncListener(collabListenerId, (payload: any) => {
         if (!payload) return;
         const myUid = loggedInUser.uid;
         const sender = payload._senderUid || payload.user?.uid || payload.uid || payload.senderUid;
-        if (sender === myUid) return;
+        if (sender && sender.toLowerCase() === myUid.toLowerCase()) return;
 
-        // Discard any legacy 7f2a spam
+        // Discard legacy spam
         if (sender?.toLowerCase().includes('7f2a') || payload.user?.name?.toUpperCase().includes('7F2A')) return;
 
         if (payload.type === 'cursor_move') {
@@ -320,7 +369,7 @@ export function useCometChat() {
               },
             });
           }
-          // Reply with our presence over CometChat so the joining incognito/normal tab immediately registers us!
+          // Reply with our presence over CometChat so the joining incognito/remote tab immediately registers us!
           sendCollabSyncMessage(roomId, {
             type: 'presence_ack',
             user: {
@@ -330,6 +379,22 @@ export function useCometChat() {
               status: 'ONLINE',
             },
           }).catch(() => {});
+
+          // If we have posts/frames, sync them to the joining peer (e.g. incognito tab / Brave browser)
+          if (postsRef.current && postsRef.current.length > 0) {
+            sendCollabSyncMessage(roomId, {
+              type: 'canvas_initial_sync',
+              posts: postsRef.current,
+              targetUid: payload.user?.uid || payload.uid,
+            }).catch(() => {});
+          }
+        } else if (payload.type === 'canvas_initial_sync') {
+          if (payload.posts && Array.isArray(payload.posts) && payload.posts.length > 0) {
+            // Populate frames if this tab currently has 0 posts
+            if (!postsRef.current || postsRef.current.length === 0) {
+              dispatch({ type: 'SET_POSTS', posts: payload.posts });
+            }
+          }
         } else if (payload.type === 'presence_ack' || payload.type === 'presence_heartbeat') {
           if (payload.user?.uid) {
             dispatch({ type: 'USER_JOINED', user: payload.user });
@@ -386,12 +451,52 @@ export function useCometChat() {
                 postId: payload.postId,
               });
               break;
+            case 'CHAT_MESSAGE':
+              if (payload.message && payload.message.id) {
+                dispatch({
+                  type: 'ADD_CHAT_MESSAGE',
+                  message: payload.message,
+                });
+              }
+              break;
+            case 'ANNOTATION_ADDED':
+              if (payload.annotation) {
+                dispatch({
+                  type: 'ADD_ANNOTATION',
+                  annotation: payload.annotation,
+                });
+              }
+              break;
+            case 'ANNOTATION_RESOLVED':
+              if (payload.id) {
+                dispatch({
+                  type: 'RESOLVE_ANNOTATION',
+                  id: payload.id,
+                  resolvedBy: payload.resolvedBy,
+                  resolvedAt: payload.resolvedAt,
+                });
+              }
+              break;
+            case 'ANNOTATION_REOPENED':
+              if (payload.id) {
+                dispatch({
+                  type: 'REOPEN_ANNOTATION',
+                  id: payload.id,
+                });
+              }
+              break;
+            case 'CHAT_NODE_TOGGLED':
+            case 'CHAT_NODE_MOVED':
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('loopx_canvas_sync', { detail: payload }));
+              }
+              break;
           }
         }
       });
       cleanupRef.current.push(cleanupCollab);
 
-      // Immediately announce presence to all tabs/peers (including incognito) via CometChat
+      // Immediately announce presence to all tabs/peers (including incognito & different browsers) via CometChat
       sendCollabSyncMessage(roomId, {
         type: 'presence_join',
         user: {
@@ -408,19 +513,27 @@ export function useCometChat() {
         uid: loggedInUser.uid,
       }).catch(() => {});
 
-      console.info('[loopx] All CometChat listeners registered. Ready for real-time collaboration.');
+      console.info('[loopx] 🟢 All CometChat listeners registered. Ready for cross-browser real-time collaboration.');
+      isInitializingRef.current = false;
     }
 
     init().catch((err) => {
-      console.error('[loopx] CometChat initialization failed:', err);
+      console.error('[loopx] CometChat initialization error:', err);
+      isInitializingRef.current = false;
     });
 
     return () => {
-      cleanupRef.current.forEach((fn) => fn());
-      cleanupRef.current = [];
+      isCurrent = false;
+      if (activeEffectIdRef.current === effectId) {
+        activeEffectIdRef.current = null;
+        isInitializingRef.current = false;
+        cleanupRef.current.forEach((fn) => {
+          try { fn(); } catch (_) {}
+        });
+        cleanupRef.current = [];
+      }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [state.roomId]);
 
   // ─── Send Chat Message via CometChat & BroadcastChannel ───────────────────
   const sendMessage = useCallback(
@@ -476,6 +589,15 @@ export function useCometChat() {
       // Send via CometChat SDK (network real-time sync with metadata)
       if (!isMockMode()) {
         try {
+          // Broadcast over CometChat Collab Sync for instant multi-tab & incognito real-time delivery
+          const { sendCollabSyncMessage } = await import('@repo/cometchat-client');
+          sendCollabSyncMessage(roomId, {
+            type: 'canvas_sync',
+            event: 'CHAT_MESSAGE',
+            senderUid: state.currentUser.uid,
+            message: localMsg,
+          }).catch(() => {});
+
           if (media?.file) {
             // Upload file directly to CometChat Cloud S3 media storage
             const sentMedia = await sendCometChatMediaMessage(
@@ -483,11 +605,13 @@ export function useCometChat() {
               media.file,
               media.type || 'image',
               'group',
-              text.trim(),
+              text.trim() || (media.type === 'audio' ? '🎙️ Voice memo' : ''),
               {
                 postId: effectivePostId,
+                mediaUrl: media.url,
                 mediaName: media.name || ('name' in media.file ? (media.file as File).name : 'media-attachment'),
                 mediaType: media.type,
+                audioDuration: media.audioDuration,
               },
             );
 
@@ -511,11 +635,12 @@ export function useCometChat() {
               }
             }
           } else {
-            await sendCometChatMessage(roomId, text.trim() || 'Shared media attachment', 'group', {
+            await sendCometChatMessage(roomId, text.trim() || (media?.type === 'audio' ? '🎙️ Voice memo' : 'Shared media attachment'), 'group', {
               postId: effectivePostId,
               mediaUrl: media?.url,
               mediaName: media?.name,
               mediaType: media?.type,
+              audioDuration: media?.audioDuration,
             });
           }
         } catch (err) {

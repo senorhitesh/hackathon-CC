@@ -481,7 +481,15 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, chatMessages: action.messages };
 
     case 'ADD_CHAT_MESSAGE':
-      if (state.chatMessages.some((m) => m.id === action.message.id)) {
+      if (
+        state.chatMessages.some(
+          (m) =>
+            m.id === action.message.id ||
+            (m.senderUid?.toLowerCase() === action.message.senderUid?.toLowerCase() &&
+              m.text === action.message.text &&
+              Math.abs(m.timestamp - action.message.timestamp) < 4000)
+        )
+      ) {
         return state;
       }
       return { ...state, chatMessages: [...state.chatMessages, action.message] };
@@ -728,21 +736,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       dispatch({ type: 'SET_ANNOTATIONS', annotations: [] });
     }
 
-    const savedChat = localStorage.getItem(`loopx_chat_${state.roomId}`);
-    if (savedChat) {
-      try {
-        const parsed = JSON.parse(savedChat);
-        const filtered = Array.isArray(parsed)
-          ? parsed.filter((m: any) => !isLegacyMockMessage(m))
-          : [];
-        dispatch({ type: 'SET_CHAT_MESSAGES', messages: filtered });
-        localStorage.setItem(`loopx_chat_${state.roomId}`, JSON.stringify(filtered));
-      } catch (_) {
-        dispatch({ type: 'SET_CHAT_MESSAGES', messages: [] });
-      }
-    } else {
-      dispatch({ type: 'SET_CHAT_MESSAGES', messages: [] });
-    }
+    // Start chat messages completely fresh for active session (user requested fresh chat)
+    dispatch({ type: 'SET_CHAT_MESSAGES', messages: [] });
+    try {
+      localStorage.removeItem(`loopx_chat_${state.roomId}`);
+    } catch (_) {}
 
     const savedAssets = localStorage.getItem(`loopx_assets_${state.roomId}`);
     if (savedAssets) {
@@ -1416,9 +1414,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         } catch (_) {}
       }
 
+      if (state.roomId) {
+        import('@repo/cometchat-client').then(({ sendCollabSyncMessage }) => {
+          sendCollabSyncMessage(state.roomId, {
+            type: 'canvas_sync',
+            event: 'ANNOTATION_ADDED',
+            annotation: full,
+            senderUid: state.currentUser.uid,
+          }).catch(() => {});
+        }).catch(() => {});
+      }
+
       return full;
     },
-    [state.currentUser.uid],
+    [state.currentUser.uid, state.roomId],
   );
 
   const resolveAnnotation = useCallback(
@@ -1442,13 +1451,48 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           });
         } catch (_) {}
       }
+
+      if (state.roomId) {
+        import('@repo/cometchat-client').then(({ sendCollabSyncMessage }) => {
+          sendCollabSyncMessage(state.roomId, {
+            type: 'canvas_sync',
+            event: 'ANNOTATION_RESOLVED',
+            id,
+            resolvedBy: state.currentUser.name,
+            resolvedAt: Date.now(),
+            senderUid: state.currentUser.uid,
+          }).catch(() => {});
+        }).catch(() => {});
+      }
     },
-    [state.currentUser.name, state.currentUser.uid],
+    [state.currentUser.name, state.currentUser.uid, state.roomId],
   );
 
   const reopenAnnotation = useCallback((id: string) => {
     dispatch({ type: 'REOPEN_ANNOTATION', id });
-  }, []);
+
+    if (channelRef.current) {
+      try {
+        channelRef.current.postMessage({
+          type: 'canvas_sync',
+          event: 'ANNOTATION_REOPENED',
+          id,
+          senderUid: state.currentUser.uid,
+        });
+      } catch (_) {}
+    }
+
+    if (state.roomId) {
+      import('@repo/cometchat-client').then(({ sendCollabSyncMessage }) => {
+        sendCollabSyncMessage(state.roomId, {
+          type: 'canvas_sync',
+          event: 'ANNOTATION_REOPENED',
+          id,
+          senderUid: state.currentUser.uid,
+        }).catch(() => {});
+      }).catch(() => {});
+    }
+  }, [state.roomId, state.currentUser.uid]);
 
   const addCanvasElement = useCallback(
     (element: Omit<CanvasElement, 'id' | 'zIndex'>) => {

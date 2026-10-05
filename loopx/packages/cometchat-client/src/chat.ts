@@ -23,7 +23,7 @@ import {
 let CometChat: any = null;
 let _chatInitialized = false;
 
-async function getSDK() {
+export async function getSDK() {
   if (CometChat) return CometChat;
   // Dynamic import to avoid SSR issues
   const mod = await import('@cometchat/chat-sdk-javascript');
@@ -34,6 +34,7 @@ async function getSDK() {
 // ─── Initialization ─────────────────────────────────────────────────────────────
 
 let _isMockMode = false;
+let _initPromise: Promise<boolean> | null = null;
 
 export function isMockMode(): boolean {
   return _isMockMode;
@@ -41,40 +42,49 @@ export function isMockMode(): boolean {
 
 export async function initCometChat(): Promise<boolean> {
   if (typeof window === 'undefined') return false;
+  if (_chatInitialized) return !_isMockMode;
+  if (_initPromise) return _initPromise;
 
-  const config = getCometChatConfig();
+  _initPromise = (async () => {
+    const config = getCometChatConfig();
 
-  if (!config) {
-    console.info(
-      '[loopx] CometChat credentials not found — running in collaborative simulation mode.',
-    );
-    _isMockMode = true;
-    _chatInitialized = true;
-    return false;
-  }
+    if (!config) {
+      console.info(
+        '[loopx] CometChat credentials not found — running in collaborative simulation mode.',
+      );
+      _isMockMode = true;
+      _chatInitialized = true;
+      return false;
+    }
 
-  try {
-    const sdk = await getSDK();
-    const appSettings = new sdk.AppSettingsBuilder()
-      .subscribePresenceForAllUsers()
-      .setRegion(config.region)
-      .autoEstablishSocketConnection(true)
-      .build();
+    try {
+      const sdk = await getSDK();
+      const appSettings = new sdk.AppSettingsBuilder()
+        .subscribePresenceForAllUsers()
+        .setRegion(config.region)
+        .autoEstablishSocketConnection(true)
+        .build();
 
-    await sdk.init(config.appId, appSettings);
-    _chatInitialized = true;
-    _isMockMode = false;
-    console.info('[loopx] CometChat initialized successfully.');
-    return true;
-  } catch (err) {
-    console.error('[loopx] CometChat init failed, falling back to simulation mode:', err);
-    _isMockMode = true;
-    _chatInitialized = true;
-    return false;
-  }
+      await sdk.init(config.appId, appSettings);
+      _chatInitialized = true;
+      _isMockMode = false;
+      console.info('[loopx] CometChat initialized successfully.');
+      return true;
+    } catch (err) {
+      console.error('[loopx] CometChat init failed, falling back to simulation mode:', err);
+      _isMockMode = true;
+      _chatInitialized = true;
+      return false;
+    }
+  })();
+
+  return _initPromise;
 }
 
 // ─── Authentication ─────────────────────────────────────────────────────────────
+
+let _activeLoginPromise: Promise<{ uid: string; name: string }> | null = null;
+let _activeLoginUid: string | null = null;
 
 export async function loginUser(uid: string): Promise<{ uid: string; name: string }> {
   if (_isMockMode) {
@@ -86,8 +96,65 @@ export async function loginUser(uid: string): Promise<{ uid: string; name: strin
   if (!config) throw new Error('CometChat config unavailable');
 
   const sdk = await getSDK();
-  const user = await sdk.login(uid, config.authKey);
-  return { uid: user.getUid(), name: user.getName() };
+
+  // Deduplicate concurrent login requests for the exact same UID
+  if (_activeLoginPromise && _activeLoginUid?.toLowerCase() === uid.toLowerCase()) {
+    console.info('[loopx] Returning active in-flight login promise for:', uid);
+    return _activeLoginPromise;
+  }
+
+  _activeLoginUid = uid;
+  _activeLoginPromise = (async () => {
+    try {
+      // 1. Check if user is already authenticated in CometChat SDK
+      try {
+        const current = await sdk.getLoggedinUser();
+        if (current) {
+          if (current.getUid()?.toLowerCase() === uid.toLowerCase()) {
+            console.info('[loopx] Current user already authenticated in CometChat:', uid);
+            return { uid: current.getUid(), name: current.getName() };
+          }
+          console.info('[loopx] Logging out previous session:', current.getUid());
+          try {
+            await sdk.logout();
+            await new Promise((r) => setTimeout(r, 150));
+          } catch (_) {}
+        }
+      } catch (_) {}
+
+      // 2. Perform login with retry logic for concurrent or locked sessions
+      for (let attempt = 0; attempt < 4; attempt++) {
+        try {
+          const user = await sdk.login(uid, config.authKey);
+          console.info('[loopx] 🟢 CometChat login SUCCESS for UID:', user.getUid(), 'Name:', user.getName());
+          return { uid: user.getUid(), name: user.getName() };
+        } catch (err: any) {
+          const msg = (err?.message || '').toLowerCase();
+          const isPending = msg.includes('wait until the previous login request ends') || err?.code === -1 || err?.code === '-1';
+          if (isPending) {
+            console.warn(`[loopx] Concurrent login in progress (attempt ${attempt + 1}/4), waiting 450ms...`);
+            await new Promise((r) => setTimeout(r, 450));
+            try {
+              const current = await sdk.getLoggedinUser();
+              if (current && current.getUid()?.toLowerCase() === uid.toLowerCase()) {
+                console.info('[loopx] Concurrent login resolved successfully for:', uid);
+                return { uid: current.getUid(), name: current.getName() };
+              }
+            } catch (_) {}
+            continue;
+          }
+          console.error('[loopx] ❌ CometChat login failed:', err?.code, err?.message, err?.details);
+          throw err;
+        }
+      }
+      throw new Error(`Failed to log in as ${uid} after retries`);
+    } finally {
+      _activeLoginPromise = null;
+      _activeLoginUid = null;
+    }
+  })();
+
+  return _activeLoginPromise;
 }
 
 export async function logoutUser(): Promise<void> {
@@ -296,6 +363,57 @@ export async function addCollabSyncListener(
   }
 }
 
+// ─── Connection Listener & Status ────────────────────────────────────────────
+
+export interface ConnectionCallbacks {
+  inConnecting?: () => void;
+  onConnected?: () => void;
+  onDisconnected?: () => void;
+  onFeatureThrottled?: () => void;
+  onConnectionError?: (e: any) => void;
+}
+
+export async function addConnectionListener(
+  listenerId: string,
+  callbacks: ConnectionCallbacks,
+): Promise<() => void> {
+  if (_isMockMode) return () => {};
+
+  try {
+    const sdk = await getSDK();
+    try {
+      sdk.removeConnectionListener(listenerId);
+    } catch (_) {}
+
+    const listener = new sdk.ConnectionListener({
+      inConnecting: () => callbacks.inConnecting?.(),
+      onConnected: () => callbacks.onConnected?.(),
+      onDisconnected: () => callbacks.onDisconnected?.(),
+      onFeatureThrottled: () => callbacks.onFeatureThrottled?.(),
+      onConnectionError: (e: any) => callbacks.onConnectionError?.(e),
+    });
+
+    sdk.addConnectionListener(listenerId, listener);
+    return () => {
+      try {
+        sdk.removeConnectionListener(listenerId);
+      } catch (_) {}
+    };
+  } catch (err) {
+    return () => {};
+  }
+}
+
+export async function getConnectionStatus(): Promise<string> {
+  if (_isMockMode) return 'connected';
+  try {
+    const sdk = await getSDK();
+    return sdk.getConnectionStatus?.() || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
 // ─── Presence Listener ─────────────────────────────────────────────────────────
 
 export interface PresenceCallbacks {
@@ -387,7 +505,15 @@ export async function sendCometChatMediaMessage(
     else if (mediaType === 'file') cometChatMediaType = sdk.MESSAGE_TYPE.FILE;
     else if (mediaType === 'audio') cometChatMediaType = sdk.MESSAGE_TYPE.AUDIO;
 
-    const mediaMessage = new sdk.MediaMessage(receiverId, file, cometChatMediaType, type);
+    // Ensure we pass a proper File object with name & mime type
+    const uploadFile =
+      file instanceof File
+        ? file
+        : new File([file], metadata?.mediaName || `voice-${Date.now()}.webm`, {
+            type: file.type || (mediaType === 'audio' ? 'audio/webm' : 'application/octet-stream'),
+          });
+
+    const mediaMessage = new sdk.MediaMessage(receiverId, uploadFile, cometChatMediaType, type);
     if (caption) {
       mediaMessage.setCaption(caption);
     }
@@ -399,6 +525,23 @@ export async function sendCometChatMediaMessage(
     return sentMsg;
   } catch (err) {
     console.warn('[loopx] CometChat sendMediaMessage warning:', err);
+    // If audio media upload fails, fall back to sending via custom metadata / text message
+    if (mediaType === 'audio') {
+      try {
+        console.info('[loopx] Falling back to text message for voice memo...');
+        return await sendCometChatMessage(
+          receiverId,
+          caption || '🎙️ Voice memo',
+          receiverType,
+          {
+            ...metadata,
+            mediaType: 'audio',
+          },
+        );
+      } catch (fallbackErr) {
+        console.warn('[loopx] Voice memo fallback failed:', fallbackErr);
+      }
+    }
     throw err;
   }
 }
@@ -456,11 +599,25 @@ export async function addCometChatMessageListener(
 
   try {
     const sdk = await getSDK();
+    try {
+      sdk.removeMessageListener(listenerId);
+    } catch (_) {}
+
     const listener = new sdk.MessageListener(listenerId, {
       onTextMessageReceived: (textMessage: any) => {
+        console.log(
+          '[loopx] 📩 CometChat onTextMessageReceived:',
+          textMessage?.getText?.() || textMessage?.text,
+          'from:',
+          textMessage?.getSender?.()?.getUid?.() || textMessage?.sender?.uid,
+        );
         onMessageReceived(textMessage);
       },
       onMediaMessageReceived: (mediaMessage: any) => {
+        console.log(
+          '[loopx] 📩 CometChat onMediaMessageReceived from:',
+          mediaMessage?.getSender?.()?.getUid?.() || mediaMessage?.sender?.uid,
+        );
         onMessageReceived(mediaMessage);
       },
       onCustomMessageReceived: (customMessage: any) => {
@@ -469,7 +626,11 @@ export async function addCometChatMessageListener(
     });
 
     sdk.addMessageListener(listenerId, listener);
-    return () => sdk.removeMessageListener(listenerId);
+    return () => {
+      try {
+        sdk.removeMessageListener(listenerId);
+      } catch (_) {}
+    };
   } catch (err) {
     return () => {};
   }
@@ -531,7 +692,7 @@ export async function getCometChatGroup(groupId: string): Promise<any> {
 }
 
 /**
- * Joins a CometChat group. Handles "already joined" silently.
+ * Joins a CometChat group with retry loop. Handles "already joined" silently.
  */
 export async function joinCometChatGroup(
   groupId: string,
@@ -549,15 +710,38 @@ export async function joinCometChatGroup(
           ? sdk.GROUP_TYPE.PRIVATE
           : sdk.GROUP_TYPE.PUBLIC;
 
-    await sdk.joinGroup(groupId, type, password || '');
-    console.info('[loopx] Joined CometChat group:', groupId);
-    return true;
-  } catch (err: any) {
-    // ERR_ALREADY_JOINED — silently succeed
-    if (err?.code === 'ERR_ALREADY_JOINED' || err?.message?.includes('already joined')) {
-      return true;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        await sdk.joinGroup(groupId, type, password || '');
+        console.info('[loopx] Joined CometChat group successfully:', groupId);
+        return true;
+      } catch (err: any) {
+        const code = (err?.code || '').toLowerCase();
+        const msg = (err?.message || '').toLowerCase();
+        const details = JSON.stringify(err?.details || '').toLowerCase();
+        if (
+          code === 'err_already_joined' ||
+          msg.includes('already joined') ||
+          msg.includes('already a member') ||
+          msg.includes('already_joined') ||
+          details.includes('already joined') ||
+          details.includes('already a member')
+        ) {
+          console.info('[loopx] User already member of CometChat group:', groupId);
+          return true;
+        }
+        if (code === 'err_group_not_found' || code === 'err_guid_not_found' || msg.includes('not found')) {
+          console.warn(`[loopx] Group ${groupId} not found yet (attempt ${attempt + 1}/5), retrying in 1.2s...`);
+          await new Promise((r) => setTimeout(r, 1200));
+          continue;
+        }
+        console.warn('[loopx] CometChat joinGroup warning:', err?.code, err?.message);
+        break;
+      }
     }
-    console.warn('[loopx] CometChat joinGroup warning:', err);
+    return false;
+  } catch (err: any) {
+    console.warn('[loopx] CometChat joinGroup outer error:', err);
     return false;
   }
 }
@@ -573,13 +757,28 @@ export async function getOrCreateGroup(
     return { guid: groupId, name: groupName };
   }
 
+  const sdk = await getSDK();
+  // Verify user is logged in first!
+  const current = await sdk.getLoggedinUser();
+  if (!current) {
+    console.error('[loopx] ❌ Cannot getOrCreateGroup: No user is logged in to CometChat!');
+    return null;
+  }
+
   // Try to create (will return existing if already created)
   const group = await createCometChatGroup(groupId, groupName, 'public');
 
-  // Join the group (will silently succeed if already a member)
+  // Join the group (will silently succeed if already a member or owner)
   await joinCometChatGroup(groupId, 'public');
 
-  return group;
+  // Fetch verified group object with real hasJoined status
+  try {
+    const verifiedGroup = await sdk.getGroup(groupId);
+    return verifiedGroup || group;
+  } catch (err: any) {
+    console.warn('[loopx] ⚠️ getGroup verification fallback:', err?.code, err?.message);
+    return group;
+  }
 }
 
 // ─── CometChat User Management ──────────────────────────────────────────────
@@ -601,16 +800,25 @@ export async function createOrGetUser(
 
   const sdk = await getSDK();
 
-  // Try to create user via REST API
+  // Try to create user via SDK
   try {
     const user = new sdk.User(uid);
     user.setName(name);
     await sdk.createUser(user, config.authKey);
-    console.info('[loopx] CometChat user created:', uid);
+    console.info('[loopx] CometChat user created successfully:', uid);
   } catch (err: any) {
-    // User already exists — that's fine
-    if (!err?.message?.includes('already exists') && err?.code !== 'ERR_UID_ALREADY_EXISTS') {
-      console.warn('[loopx] CometChat createUser warning:', err);
+    const code = (err?.code || '').toLowerCase();
+    const msg = (err?.message || '').toLowerCase();
+    const details = JSON.stringify(err?.details || '').toLowerCase();
+    if (
+      code === 'err_uid_already_exists' ||
+      msg.includes('already exists') ||
+      details.includes('already exists') ||
+      msg.includes('already_exists')
+    ) {
+      console.info('[loopx] User already exists in CometChat:', uid);
+    } else {
+      console.warn('[loopx] ⚠️ CometChat createUser returned warning:', err?.code, err?.message);
     }
   }
 

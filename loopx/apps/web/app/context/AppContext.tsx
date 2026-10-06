@@ -798,7 +798,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // Start chat messages completely fresh for active session (user requested fresh chat)
     dispatch({ type: 'SET_CHAT_MESSAGES', messages: [] });
     try {
-      localStorage.removeItem(`loopx_chat_${state.roomId}`);
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.removeItem(`loopx_chat_${state.roomId}`);
+        // Purge any residual loopx_chat_ keys across sessions
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('loopx_chat_')) {
+            localStorage.removeItem(k);
+          }
+        }
+      }
     } catch (_) {}
 
     const savedAssets = localStorage.getItem(`loopx_assets_${state.roomId}`);
@@ -811,12 +820,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     }
   }, [state.roomId]);
-
-  // Save chat to localStorage
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem(`loopx_chat_${state.roomId}`, JSON.stringify(state.chatMessages));
-  }, [state.roomId, state.chatMessages]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -874,14 +877,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             return;
           }
 
-          if (payload.type === 'chat_initial_sync' && Array.isArray(payload.messages) && payload.messages.length > 0) {
-            payload.messages.forEach((msg: any) => {
-              if (msg && !isLegacyMockMessage(msg)) {
-                dispatch({ type: 'ADD_CHAT_MESSAGE', message: msg });
-              }
-            });
-            return;
-          }
 
           if (payload.type === 'cursor_move') {
             if (payload.uid === myUid) return;
@@ -974,6 +969,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 if (payload.message && !isLegacyMockMessage(payload.message)) {
                   dispatch({ type: 'ADD_CHAT_MESSAGE', message: payload.message });
                 }
+                break;
+              case 'CHAT_CLEAR':
+                dispatch({ type: 'CLEAR_CHAT_MESSAGES', postId: payload.postId });
                 break;
             }
           }
@@ -1261,6 +1259,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 message: payload.message,
               });
             }
+            break;
+          case 'CHAT_CLEAR':
+            dispatch({
+              type: 'CLEAR_CHAT_MESSAGES',
+              postId: payload.postId,
+            });
             break;
         }
       }
@@ -1734,9 +1738,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             localStorage.setItem(key, JSON.stringify(remaining));
           }
         } catch (_) {}
+
+        // Broadcast to other tabs & windows
+        if (channelRef.current) {
+          channelRef.current.postMessage({
+            type: 'canvas_sync',
+            event: 'CHAT_CLEAR',
+            postId,
+          });
+        }
+
+        // Broadcast to cross-device collab SSE relay
+        fetch('/api/collab', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            roomId: state.roomId,
+            senderUid: state.currentUser.uid,
+            payload: {
+              type: 'canvas_sync',
+              event: 'CHAT_CLEAR',
+              postId,
+            },
+          }),
+        }).catch(() => {});
       }
     },
-    [state.roomId, state.chatMessages],
+    [state.roomId, state.chatMessages, state.currentUser.uid],
   );
 
   return (

@@ -140,7 +140,6 @@ export function useCometChat() {
         createOrGetUser,
         sanitizeCometChatGuid,
         getOrCreateGroup,
-        fetchCometChatMessageHistory,
         fetchOnlineGroupMembers,
         addCometChatMessageListener,
         addAnnotationListener,
@@ -252,22 +251,8 @@ export function useCometChat() {
 
       if (!isCurrent || activeEffectIdRef.current !== effectId) return;
 
-      // ── Step 5: Fetch Previous Message History from CometChat ───────────────
-      try {
-        const history = await fetchCometChatMessageHistory(roomId, 40);
-        if (Array.isArray(history) && history.length > 0) {
-          history.forEach((m: any) => {
-            const chatMsg = mapSdkMessage(m);
-            if (chatMsg) {
-              dispatch({ type: 'ADD_CHAT_MESSAGE', message: chatMsg });
-            }
-          });
-        }
-      } catch (histErr) {
-        console.warn('[loopx] Failed to fetch message history:', histErr);
-      }
-
-      if (!isCurrent || activeEffectIdRef.current !== effectId) return;
+      // ── Step 5: Start Fresh Session (do not populate past chat history) ───
+      // Every review session / new device starts with a fresh, clean chat stream.
 
       // ── Step 6: Real-time Message Listener ─────────────────────────────────
       const messageListenerId = `loopx_chat_${roomId}_${effectId}`;

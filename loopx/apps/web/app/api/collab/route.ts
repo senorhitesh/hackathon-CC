@@ -8,7 +8,7 @@ type ClientController = ReadableStreamDefaultController<Uint8Array>;
 
 // In-memory room state and active SSE subscribers
 const roomSubscribers = new Map<string, Set<ClientController>>();
-const roomStateCache = new Map<string, { posts?: any[]; messages?: any[]; lastSeen?: number }>();
+const roomStateCache = new Map<string, { posts?: any[]; lastSeen?: number }>();
 
 function sendSSE(controller: ClientController, data: any) {
   try {
@@ -52,13 +52,6 @@ export async function GET(req: NextRequest) {
           fromCache: true,
         });
       }
-      if (cached?.messages && cached.messages.length > 0) {
-        sendSSE(controller, {
-          type: 'chat_initial_sync',
-          messages: cached.messages,
-          fromCache: true,
-        });
-      }
     },
     cancel() {
       if (currentController && roomSubscribers.has(roomId)) {
@@ -89,7 +82,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing roomId or payload' }, { status: 400 });
     }
 
-    // Cache posts and chat messages
+    // Cache canvas elements for visual layout synchronization (chat starts fresh per session)
     const currentEntry = roomStateCache.get(roomId) || {};
     if (payload.type === 'canvas_initial_sync' && Array.isArray(payload.posts)) {
       roomStateCache.set(roomId, { ...currentEntry, posts: payload.posts, lastSeen: Date.now() });
@@ -107,12 +100,6 @@ export async function POST(req: NextRequest) {
       const current = currentEntry.posts || [];
       const updated = current.filter((p) => p.id !== payload.postId);
       roomStateCache.set(roomId, { ...currentEntry, posts: updated, lastSeen: Date.now() });
-    } else if (payload.type === 'canvas_sync' && payload.event === 'CHAT_MESSAGE' && payload.message) {
-      const currentMsgs = currentEntry.messages || [];
-      if (!currentMsgs.some((m: any) => m.id === payload.message.id)) {
-        const updatedMsgs = [...currentMsgs, payload.message].slice(-60);
-        roomStateCache.set(roomId, { ...currentEntry, messages: updatedMsgs, lastSeen: Date.now() });
-      }
     }
 
     // Broadcast to all active subscribers for this room (except sender if specified)

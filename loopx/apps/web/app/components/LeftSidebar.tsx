@@ -32,7 +32,13 @@ export function LeftSidebar() {
     activeUsers,
     collaborators,
   } = state;
-  const [isSidebarVisible, setIsSidebarVisible] = useState(true);
+  const [isSidebarVisible, setIsSidebarVisible] = useState(false);
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth >= 768) {
+      setIsSidebarVisible(true);
+    }
+  }, []);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -123,7 +129,7 @@ export function LeftSidebar() {
   }
 
   return (
-    <aside className="select-none shrink-0 z-30 flex flex-col gap-2.5 w-[310px] pointer-events-auto font-sans animate-fade-in">
+    <aside className="select-none shrink-0 z-30 flex flex-col gap-2.5 w-[310px] max-w-[calc(100vw-24px)] pointer-events-auto font-sans animate-fade-in">
       {/* ── Main Frosted Glass Card ── */}
       <div className="rounded-2xl bg-white/95 backdrop-blur-md border border-neutral-200/90 shadow-xl overflow-hidden flex flex-col">
         {/* ── Header: Project & Board Info ── */}

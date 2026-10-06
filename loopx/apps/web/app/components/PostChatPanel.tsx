@@ -39,6 +39,12 @@ export function PostChatPanel() {
   const { posts, activePostId, annotations, currentUser, chatMessages, collaborators, customAliases } = state;
   const [inputText, setInputText] = useState('');
   const [isMinimized, setIsMinimized] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setIsMinimized(true);
+    }
+  }, []);
   const [isSending, setIsSending] = useState(false);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [chatMode, setChatMode] = useState<'general' | 'frame'>('general');
@@ -203,17 +209,25 @@ export function PostChatPanel() {
   }
 
   return (
-    <aside className="w-[340px] bg-white/95 backdrop-blur-md border-l border-neutral-200 flex flex-col h-[calc(100vh-48px)] flex-shrink-0 z-30 select-none shadow-xl transition-all font-sans">
-      {/* ── Top Header ── */}
-      <div className="px-4 py-3.5 border-b border-neutral-100 flex items-center justify-between bg-white">
-        <div className="flex items-center gap-2.5">
-          <button
-            onClick={() => setIsMinimized(true)}
-            title="Minimize"
-            className="w-8 h-8 rounded-full hover:bg-neutral-100 flex items-center justify-center text-neutral-600 transition-colors"
-          >
-            <Menu className="w-4 h-4" />
-          </button>
+    <>
+      {/* Mobile backdrop */}
+      <div
+        className="fixed inset-0 bg-black/40 backdrop-blur-xs z-30 sm:hidden animate-fade-in"
+        onClick={() => setIsMinimized(true)}
+      />
+
+      <aside className="w-full sm:w-[340px] max-w-full bg-white/95 backdrop-blur-md border-l border-neutral-200 flex flex-col h-[calc(100dvh-48px)] fixed sm:relative top-12 sm:top-auto right-0 flex-shrink-0 z-40 sm:z-30 select-none shadow-2xl sm:shadow-xl transition-all font-sans">
+        {/* ── Top Header ── */}
+        <div className="px-4 py-3.5 border-b border-neutral-100 flex items-center justify-between bg-white">
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => setIsMinimized(true)}
+              title="Minimize chat"
+              className="w-8 h-8 rounded-full hover:bg-neutral-100 flex items-center justify-center text-neutral-600 transition-colors"
+            >
+              <X className="w-4 h-4 sm:hidden" />
+              <Menu className="w-4 h-4 hidden sm:block" />
+            </button>
           <div>
             <h3 className="text-xs font-semibold text-neutral-900 truncate max-w-[150px]">
               {chatMode === 'general'
@@ -353,8 +367,8 @@ export function PostChatPanel() {
             )}
           </div>
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-neutral-900">
-              Hi, {myDisplayName} 👋
+            <h2 className="text-sm font-semibold text-neutral-900" suppressHydrationWarning>
+              Hi, <span suppressHydrationWarning>{myDisplayName}</span> 👋
             </h2>
             <button
               type="button"
@@ -847,6 +861,7 @@ export function PostChatPanel() {
         </form>
       </div>
     </aside>
+    </>
   );
 }
 

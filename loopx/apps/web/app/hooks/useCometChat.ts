@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { useAppContext, type ChatMessage } from '../context/AppContext';
+import { reconcileElements } from '../data';
 import type { PinAnnotation } from '@repo/types';
 
 /**
@@ -137,6 +138,7 @@ export function useCometChat() {
         addConnectionListener,
         getConnectionStatus,
         createOrGetUser,
+        sanitizeCometChatGuid,
         getOrCreateGroup,
         fetchCometChatMessageHistory,
         fetchOnlineGroupMembers,
@@ -238,7 +240,8 @@ export function useCometChat() {
       });
 
       // ── Step 4: Create/Join CometChat Group for Room ───────────────────────
-      const roomId = currentRoomRef.current;
+      const rawRoomId = state.roomId || currentRoomRef.current || 'main-studio-workspace';
+      const roomId = sanitizeCometChatGuid(rawRoomId);
       const group = await getOrCreateGroup(roomId, state.sessionName || 'Creative Workspace');
       console.info(
         '[loopx] 🟢 CometChat group joined & ready:',
@@ -246,6 +249,23 @@ export function useCometChat() {
         'group:',
         group?.getGuid?.() || group?.name || roomId,
       );
+
+      if (!isCurrent || activeEffectIdRef.current !== effectId) return;
+
+      // ── Step 5: Fetch Previous Message History from CometChat ───────────────
+      try {
+        const history = await fetchCometChatMessageHistory(roomId, 40);
+        if (Array.isArray(history) && history.length > 0) {
+          history.forEach((m: any) => {
+            const chatMsg = mapSdkMessage(m);
+            if (chatMsg) {
+              dispatch({ type: 'ADD_CHAT_MESSAGE', message: chatMsg });
+            }
+          });
+        }
+      } catch (histErr) {
+        console.warn('[loopx] Failed to fetch message history:', histErr);
+      }
 
       if (!isCurrent || activeEffectIdRef.current !== effectId) return;
 
@@ -390,10 +410,9 @@ export function useCometChat() {
           }
         } else if (payload.type === 'canvas_initial_sync') {
           if (payload.posts && Array.isArray(payload.posts) && payload.posts.length > 0) {
-            // Populate frames if this tab currently has 0 posts
-            if (!postsRef.current || postsRef.current.length === 0) {
-              dispatch({ type: 'SET_POSTS', posts: payload.posts });
-            }
+            // Reconcile frames using Excalidraw deterministic conflict resolution algorithm
+            const merged = reconcileElements(postsRef.current || [], payload.posts);
+            dispatch({ type: 'SET_POSTS', posts: merged });
           }
         } else if (payload.type === 'presence_ack' || payload.type === 'presence_heartbeat') {
           if (payload.user?.uid) {
@@ -544,8 +563,8 @@ export function useCometChat() {
     ) => {
       if (!text.trim() && !media?.url) return;
 
-      const { sendCometChatMessage, sendCometChatMediaMessage, isMockMode } = await import('@repo/cometchat-client');
-      const roomId = currentRoomRef.current;
+      const { sendCometChatMessage, sendCometChatMediaMessage, isMockMode, sanitizeCometChatGuid } = await import('@repo/cometchat-client');
+      const roomId = sanitizeCometChatGuid(state.roomId || currentRoomRef.current || 'main-studio-workspace');
       const effectivePostId = targetPostId || state.activePostId || roomId;
 
       const rawUid = state.currentUser.uid || '';
@@ -574,7 +593,23 @@ export function useCometChat() {
 
       dispatch({ type: 'ADD_CHAT_MESSAGE', message: localMsg });
 
-      // Cross-tab real-time sync
+      // Cross-Browser HTTP/SSE Relay (instant sync across normal tabs, incognito tabs, remote browsers)
+      fetch('/api/collab', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomId: state.roomId,
+          senderUid: state.currentUser.uid,
+          payload: {
+            type: 'canvas_sync',
+            event: 'CHAT_MESSAGE',
+            senderUid: state.currentUser.uid,
+            message: localMsg,
+          },
+        }),
+      }).catch(() => {});
+
+      // Cross-tab real-time sync (same profile)
       if (typeof BroadcastChannel !== 'undefined') {
         const bc = new BroadcastChannel(`canvas_collab_${roomId}`);
         bc.postMessage({

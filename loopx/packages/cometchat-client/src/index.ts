@@ -27,6 +27,7 @@ export {
   addCollabSyncListener,
   COLLAB_SYNC_CUSTOM_TYPE,
   // Group Management
+  sanitizeCometChatGuid,
   createCometChatGroup,
   getCometChatGroup,
   joinCometChatGroup,

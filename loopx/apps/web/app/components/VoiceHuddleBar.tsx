@@ -107,8 +107,8 @@ export function VoiceHuddleBar() {
       />
 
       {/* Floating Modern Voice Huddle Bar */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-fade-in select-none">
-        <div className="flex items-center gap-3 px-4 py-2.5 rounded-full bg-white/95 backdrop-blur-xl border border-neutral-200/90 shadow-2xl shadow-neutral-900/10 text-neutral-900">
+      <div className="fixed bottom-18 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 animate-fade-in select-none w-[94vw] sm:w-auto max-w-lg">
+        <div className="flex items-center justify-between sm:justify-start gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-2.5 rounded-full bg-white/95 backdrop-blur-xl border border-neutral-200/90 shadow-2xl shadow-neutral-900/10 text-neutral-900 overflow-x-auto">
           {/* Live Voice Status Indicator & Timer */}
           <div className="flex items-center gap-2">
             <span className="relative flex h-2.5 w-2.5">

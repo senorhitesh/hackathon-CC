@@ -8,6 +8,7 @@ import { PostChatPanel } from '../components/PostChatPanel';
 import { LoginModal } from '../components/LoginModal';
 import { CreateRoomModal } from '../components/CreateRoomModal';
 import { CreatePostModal } from '../components/CreatePostModal';
+import { ShareDialog } from '../components/ShareDialog';
 import { VoiceHuddleBar } from '../components/VoiceHuddleBar';
 import { useCometChat } from '../hooks/useCometChat';
 
@@ -61,6 +62,7 @@ function WorkspaceInner() {
         <LoginModal />
         <CreateRoomModal />
         <CreatePostModal />
+        <ShareDialog />
       </div>
     </CometChatContext.Provider>
   );

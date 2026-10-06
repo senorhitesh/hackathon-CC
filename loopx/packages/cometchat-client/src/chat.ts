@@ -31,6 +31,45 @@ export async function getSDK() {
   return CometChat;
 }
 
+// ─── GUID Sanitization ────────────────────────────────────────────────────────
+
+/**
+ * Sanitizes an arbitrary room/workspace identifier into a strictly valid CometChat GUID.
+ * CometChat rules:
+ * - Up to 100 characters.
+ * - Alphanumeric (a-z, A-Z, 0-9), hyphens (-), underscores (_).
+ * - No commas, no hashes (#), no question marks, no spaces, no slashes.
+ */
+export function sanitizeCometChatGuid(rawId?: string | null): string {
+  if (!rawId) return 'main-studio-workspace';
+  let clean = String(rawId).trim();
+  // Strip URL paths / protocols if full URL was passed
+  if (clean.includes('#room=')) {
+    clean = clean.split('#room=')[1]!;
+  }
+  if (clean.includes('?room=')) {
+    clean = clean.split('?room=')[1]!;
+  }
+  clean = clean.replace(/^[#?]/, '');
+  // If in format roomId,roomKey, take only roomId
+  if (clean.includes(',')) {
+    clean = clean.split(',')[0]!;
+  }
+  clean = clean.replace(/^room=/i, '');
+  // Replace invalid characters with hyphens
+  clean = clean.replace(/[^a-zA-Z0-9_-]/g, '-');
+  // Collapse multiple consecutive hyphens/underscores
+  clean = clean.replace(/[-_]{2,}/g, '-');
+  // Trim leading and trailing hyphens/underscores
+  clean = clean.replace(/^[-_]+|[-_]+$/g, '');
+  // Limit to 90 characters
+  clean = clean.slice(0, 90);
+  if (!clean || clean.length < 1) {
+    return 'main-studio-workspace';
+  }
+  return clean;
+}
+
 // ─── Initialization ─────────────────────────────────────────────────────────────
 
 let _isMockMode = false;
@@ -307,6 +346,8 @@ export async function sendCollabSyncMessage(
 ): Promise<void> {
   if (_isMockMode) return;
 
+  const cleanRoomId = sanitizeCometChatGuid(roomId);
+
   try {
     const sdk = await getSDK();
     const customData = {
@@ -316,14 +357,21 @@ export async function sendCollabSyncMessage(
     };
 
     const message = new sdk.CustomMessage(
-      roomId,
+      cleanRoomId,
       sdk.RECEIVER_TYPE.GROUP,
       COLLAB_SYNC_CUSTOM_TYPE,
       customData,
     );
     message.setShouldUpdateConversation(false);
 
-    await sdk.sendCustomMessage(message);
+    try {
+      await sdk.sendCustomMessage(message);
+    } catch (_) {
+      try {
+        await joinCometChatGroup(cleanRoomId, 'public');
+        await sdk.sendCustomMessage(message);
+      } catch (_) {}
+    }
   } catch (_) {
     // Non-critical: ignore rate limits or network blips
   }
@@ -450,23 +498,31 @@ export async function sendCometChatMessage(
   receiverType: 'user' | 'group' = 'group',
   metadata?: Record<string, any>,
 ): Promise<any> {
+  const effectiveReceiverId = receiverType === 'group' ? sanitizeCometChatGuid(receiverId) : receiverId;
   if (_isMockMode) {
     console.info('[loopx] CometChat simulation mode: message logged locally.');
-    return { id: `mock_${Date.now()}`, text, receiverId, metadata };
+    return { id: `mock_${Date.now()}`, text, receiverId: effectiveReceiverId, metadata };
   }
 
   try {
     const sdk = await getSDK();
     const type = receiverType === 'group' ? sdk.RECEIVER_TYPE.GROUP : sdk.RECEIVER_TYPE.USER;
-    const textMessage = new sdk.TextMessage(receiverId, text, type);
+    const textMessage = new sdk.TextMessage(effectiveReceiverId, text, type);
     if (metadata) {
       textMessage.setMetadata(metadata);
     }
-    const sentMsg = await sdk.sendMessage(textMessage);
-    return sentMsg;
-  } catch (err) {
-    console.warn('[loopx] CometChat sendTextMessage warning:', err);
-    return { id: `msg_${Date.now()}`, text, receiverId, metadata };
+    try {
+      return await sdk.sendMessage(textMessage);
+    } catch (innerErr: any) {
+      if (receiverType === 'group') {
+        await joinCometChatGroup(effectiveReceiverId, 'public');
+        return await sdk.sendMessage(textMessage);
+      }
+      throw innerErr;
+    }
+  } catch (err: any) {
+    console.warn('[loopx] CometChat sendTextMessage warning:', effectiveReceiverId, err?.code, err?.message);
+    return { id: `msg_${Date.now()}`, text, receiverId: effectiveReceiverId, metadata };
   }
 }
 
@@ -480,12 +536,13 @@ export async function sendCometChatMediaMessage(
   caption?: string,
   metadata?: Record<string, any>,
 ): Promise<any> {
+  const effectiveReceiverId = receiverType === 'group' ? sanitizeCometChatGuid(receiverId) : receiverId;
   if (_isMockMode) {
     console.info('[loopx] CometChat simulation mode: media message simulated.');
     const preview = typeof window !== 'undefined' ? URL.createObjectURL(file) : '';
     return {
       id: `mock_media_${Date.now()}`,
-      receiverId,
+      receiverId: effectiveReceiverId,
       metadata,
       caption,
       data: {
@@ -513,7 +570,7 @@ export async function sendCometChatMediaMessage(
             type: file.type || (mediaType === 'audio' ? 'audio/webm' : 'application/octet-stream'),
           });
 
-    const mediaMessage = new sdk.MediaMessage(receiverId, uploadFile, cometChatMediaType, type);
+    const mediaMessage = new sdk.MediaMessage(effectiveReceiverId, uploadFile, cometChatMediaType, type);
     if (caption) {
       mediaMessage.setCaption(caption);
     }
@@ -523,14 +580,14 @@ export async function sendCometChatMediaMessage(
 
     const sentMsg = await sdk.sendMediaMessage(mediaMessage);
     return sentMsg;
-  } catch (err) {
-    console.warn('[loopx] CometChat sendMediaMessage warning:', err);
+  } catch (err: any) {
+    console.warn('[loopx] CometChat sendMediaMessage warning:', effectiveReceiverId, err?.code, err?.message);
     // If audio media upload fails, fall back to sending via custom metadata / text message
     if (mediaType === 'audio') {
       try {
         console.info('[loopx] Falling back to text message for voice memo...');
         return await sendCometChatMessage(
-          receiverId,
+          effectiveReceiverId,
           caption || '🎙️ Voice memo',
           receiverType,
           {
@@ -547,10 +604,11 @@ export async function sendCometChatMediaMessage(
 }
 
 export async function fetchOnlineGroupMembers(groupId: string): Promise<{ uid: string; name: string; status: 'ONLINE' | 'OFFLINE' | 'AWAY' }[]> {
+  const cleanGroupId = sanitizeCometChatGuid(groupId);
   if (_isMockMode) return [];
   try {
     const sdk = await getSDK();
-    const groupMembersRequest = new sdk.GroupMembersRequestBuilder(groupId)
+    const groupMembersRequest = new sdk.GroupMembersRequestBuilder(cleanGroupId)
       .setLimit(30)
       .build();
     const members = await groupMembersRequest.fetchNext();
@@ -574,19 +632,20 @@ export async function fetchCometChatMessageHistory(
   receiverId: string,
   limit: number = 30,
 ): Promise<any[]> {
+  const cleanReceiverId = sanitizeCometChatGuid(receiverId);
   if (_isMockMode) return [];
 
   try {
     const sdk = await getSDK();
     const messagesRequest = new sdk.MessagesRequestBuilder()
-      .setGUID(receiverId)
+      .setGUID(cleanReceiverId)
       .setLimit(limit)
       .build();
 
     const messages = await messagesRequest.fetchPrevious();
     return messages || [];
-  } catch (err) {
-    console.warn('[loopx] CometChat fetchMessageHistory warning:', err);
+  } catch (err: any) {
+    console.warn('[loopx] CometChat fetchMessageHistory warning:', cleanReceiverId, err?.code, err?.message);
     return [];
   }
 }
@@ -647,9 +706,10 @@ export async function createCometChatGroup(
   groupName: string,
   groupType: 'public' | 'password' | 'private' = 'public',
 ): Promise<any> {
+  const cleanGuid = sanitizeCometChatGuid(groupId);
   if (_isMockMode) {
-    console.info('[loopx] Mock mode: group creation simulated for', groupId);
-    return { guid: groupId, name: groupName, type: groupType };
+    console.info('[loopx] Mock mode: group creation simulated for', cleanGuid);
+    return { guid: cleanGuid, name: groupName, type: groupType };
   }
 
   try {
@@ -661,17 +721,19 @@ export async function createCometChatGroup(
           ? sdk.GROUP_TYPE.PRIVATE
           : sdk.GROUP_TYPE.PUBLIC;
 
-    const group = new sdk.Group(groupId, groupName, type);
+    const group = new sdk.Group(cleanGuid, groupName || 'Creative Workspace', type);
     const created = await sdk.createGroup(group);
-    console.info('[loopx] CometChat group created:', groupId);
+    console.info('[loopx] CometChat group created:', cleanGuid);
     return created;
   } catch (err: any) {
     // ERR_GROUP_ALREADY_EXISTS — that's fine, just fetch it
-    if (err?.code === 'ERR_GROUP_ALREADY_EXISTS' || err?.message?.includes('already exists')) {
-      console.info('[loopx] Group already exists, fetching:', groupId);
-      return getCometChatGroup(groupId);
+    const code = (err?.code || '').toLowerCase();
+    const msg = (err?.message || '').toLowerCase();
+    if (code === 'err_group_already_exists' || msg.includes('already exists')) {
+      console.info('[loopx] Group already exists, fetching:', cleanGuid);
+      return getCometChatGroup(cleanGuid);
     }
-    console.warn('[loopx] CometChat createGroup warning:', err);
+    console.warn('[loopx] CometChat createGroup warning:', cleanGuid, err?.code, err?.message);
     return null;
   }
 }
@@ -680,13 +742,14 @@ export async function createCometChatGroup(
  * Fetches an existing CometChat group by GUID.
  */
 export async function getCometChatGroup(groupId: string): Promise<any> {
-  if (_isMockMode) return { guid: groupId };
+  const cleanGuid = sanitizeCometChatGuid(groupId);
+  if (_isMockMode) return { guid: cleanGuid };
 
   try {
     const sdk = await getSDK();
-    return await sdk.getGroup(groupId);
-  } catch (err) {
-    console.warn('[loopx] CometChat getGroup warning:', err);
+    return await sdk.getGroup(cleanGuid);
+  } catch (err: any) {
+    console.warn('[loopx] CometChat getGroup warning:', cleanGuid, err?.code, err?.message);
     return null;
   }
 }
@@ -699,6 +762,7 @@ export async function joinCometChatGroup(
   groupType: 'public' | 'password' | 'private' = 'public',
   password?: string,
 ): Promise<boolean> {
+  const cleanGuid = sanitizeCometChatGuid(groupId);
   if (_isMockMode) return true;
 
   try {
@@ -712,8 +776,8 @@ export async function joinCometChatGroup(
 
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
-        await sdk.joinGroup(groupId, type, password || '');
-        console.info('[loopx] Joined CometChat group successfully:', groupId);
+        await sdk.joinGroup(cleanGuid, type, password || '');
+        console.info('[loopx] Joined CometChat group successfully:', cleanGuid);
         return true;
       } catch (err: any) {
         const code = (err?.code || '').toLowerCase();
@@ -727,21 +791,21 @@ export async function joinCometChatGroup(
           details.includes('already joined') ||
           details.includes('already a member')
         ) {
-          console.info('[loopx] User already member of CometChat group:', groupId);
+          console.info('[loopx] User already member of CometChat group:', cleanGuid);
           return true;
         }
         if (code === 'err_group_not_found' || code === 'err_guid_not_found' || msg.includes('not found')) {
-          console.warn(`[loopx] Group ${groupId} not found yet (attempt ${attempt + 1}/5), retrying in 1.2s...`);
+          console.warn(`[loopx] Group ${cleanGuid} not found yet (attempt ${attempt + 1}/5), retrying in 1.2s...`);
           await new Promise((r) => setTimeout(r, 1200));
           continue;
         }
-        console.warn('[loopx] CometChat joinGroup warning:', err?.code, err?.message);
+        console.warn('[loopx] CometChat joinGroup warning:', cleanGuid, err?.code, err?.message);
         break;
       }
     }
     return false;
   } catch (err: any) {
-    console.warn('[loopx] CometChat joinGroup outer error:', err);
+    console.warn('[loopx] CometChat joinGroup outer error:', cleanGuid, err);
     return false;
   }
 }
@@ -753,8 +817,9 @@ export async function getOrCreateGroup(
   groupId: string,
   groupName: string,
 ): Promise<any> {
+  const cleanGuid = sanitizeCometChatGuid(groupId);
   if (_isMockMode) {
-    return { guid: groupId, name: groupName };
+    return { guid: cleanGuid, name: groupName };
   }
 
   const sdk = await getSDK();
@@ -766,17 +831,17 @@ export async function getOrCreateGroup(
   }
 
   // Try to create (will return existing if already created)
-  const group = await createCometChatGroup(groupId, groupName, 'public');
+  const group = await createCometChatGroup(cleanGuid, groupName, 'public');
 
   // Join the group (will silently succeed if already a member or owner)
-  await joinCometChatGroup(groupId, 'public');
+  await joinCometChatGroup(cleanGuid, 'public');
 
   // Fetch verified group object with real hasJoined status
   try {
-    const verifiedGroup = await sdk.getGroup(groupId);
+    const verifiedGroup = await sdk.getGroup(cleanGuid);
     return verifiedGroup || group;
   } catch (err: any) {
-    console.warn('[loopx] ⚠️ getGroup verification fallback:', err?.code, err?.message);
+    console.warn('[loopx] ⚠️ getGroup verification fallback:', cleanGuid, err?.code, err?.message);
     return group;
   }
 }

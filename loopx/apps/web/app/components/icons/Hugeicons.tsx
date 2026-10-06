@@ -215,3 +215,5 @@ export const RefreshCw = RefreshCwIcon;
 export const Zap = ZapIcon;
 export const FolderKanban = FolderKanbanIcon;
 export const ExternalLink = ExternalLinkIcon;
+export const Link01Icon = createHugeicon('Link01Icon', (CoreIcons.Link01Icon || (CoreIcons as any).Link) as IconSvgElement);
+export const Link = Link01Icon;

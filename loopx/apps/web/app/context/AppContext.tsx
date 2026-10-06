@@ -22,6 +22,14 @@ import type {
   BrandAsset,
   UserRole,
 } from '@repo/types';
+import {
+  getCollaborationLink,
+  getCollaborationLinkData,
+  generateCollaborationLinkData,
+  reconcileElements,
+  shouldDiscardRemoteElement,
+  Portal,
+} from '../data';
 
 // ─── Initial Data ─────────────────────────────────────────────────────────────
 // No mock data — localStorage is the sole source of truth.
@@ -63,6 +71,7 @@ export interface AppState extends AdProofSession {
   collaborators: Record<string, CollaboratorCursor>;
   chatMessages: ChatMessage[];
   customAliases: Record<string, string>;
+  roomKey: string | null;
   // Modals state
   isLoginOpen: boolean;
   isCreateRoomOpen: boolean;
@@ -75,7 +84,7 @@ type Action =
   | { type: 'SET_USER_NAME'; name: string }
   | { type: 'SET_USER_ALIAS'; uid: string; alias: string }
   | { type: 'SET_USER_ALIASES'; aliases: Record<string, string> }
-  | { type: 'SET_ROOM_ID'; roomId: string; sessionName?: string }
+  | { type: 'SET_ROOM_ID'; roomId: string; sessionName?: string; roomKey?: string | null }
   | { type: 'SET_ROOMS'; rooms: BoardRoom[] }
   | { type: 'ADD_ROOM'; room: BoardRoom }
   | { type: 'REMOVE_ROOM'; roomId: string }
@@ -188,7 +197,7 @@ const initialState: AppState = {
       name: 'Creative Workspace',
       shareUrl: '',
       ownerName: '',
-      createdAt: Date.now(),
+      createdAt: 1700000000000,
     },
   ],
   posts: [],
@@ -199,6 +208,7 @@ const initialState: AppState = {
   pinModeActive: false,
   chatMessages: [],
   customAliases: {},
+  roomKey: null,
   isLoginOpen: false,
   isCreateRoomOpen: false,
   isCreatePostOpen: false,
@@ -240,6 +250,7 @@ function reducer(state: AppState, action: Action): AppState {
         ...state,
         roomId: action.roomId,
         sessionName: action.sessionName ?? existingRoom?.name ?? 'Workspace',
+        roomKey: action.roomKey !== undefined ? action.roomKey : state.roomKey,
       };
     }
 
@@ -542,7 +553,9 @@ interface AppContextValue {
   reopenAnnotation: (id: string) => void;
   addCanvasElement: (element: Omit<CanvasElement, 'id' | 'zIndex'>) => void;
   broadcastCursor: (x: number, y: number) => void;
-  getShareUrl: (roomId?: string) => string;
+  getShareUrl: (roomId?: string, roomKey?: string) => string;
+  startCollaborationSession: (customRoomId?: string | null) => Promise<{ roomId: string; roomKey: string }>;
+  stopCollaborationSession: () => void;
   sendRealtimeChatMessage: (postId: string, text: string) => ChatMessage | void;
   clearChatMessages: (postId?: string) => void;
   updateUserName: (name: string) => void;
@@ -554,65 +567,9 @@ interface AppContextValue {
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function getInitialState(): AppState {
-  let initialUser: ActiveUser & { role: UserRole; email?: string; isLoggedIn?: boolean } = {
-    uid: 'usr_init',
-    name: 'User',
-    status: 'ONLINE',
-    role: 'owner',
-    isLoggedIn: false,
-  };
-
-  if (typeof window !== 'undefined') {
-    // Purge legacy 7F2A storage keys
-    try {
-      const prefName = localStorage.getItem('loopx_preferred_name');
-      if (prefName && (prefName.toUpperCase().includes('7F2A') || prefName === 'User' || prefName === 'Collaborator')) {
-        localStorage.removeItem('loopx_preferred_name');
-      }
-      const sessionUser = localStorage.getItem('loopx_user_session');
-      if (sessionUser && sessionUser.toLowerCase().includes('7f2a')) {
-        localStorage.removeItem('loopx_user_session');
-      }
-    } catch (_) {}
-
-    let userToSet: (ActiveUser & { role: UserRole; email?: string; isLoggedIn?: boolean }) | null = null;
-    const tabUser = sessionStorage.getItem('loopx_tab_user');
-    if (tabUser) {
-      try {
-        const parsed = JSON.parse(tabUser);
-        if (
-          parsed &&
-          parsed.uid &&
-          !parsed.uid.toLowerCase().includes('7f2a') &&
-          !parsed.uid.toLowerCase().includes('usr_init') &&
-          !parsed.name?.toUpperCase().includes('7F2A')
-        ) {
-          userToSet = parsed;
-        } else {
-          sessionStorage.removeItem('loopx_tab_user');
-        }
-      } catch (_) {}
-    }
-
-    if (!userToSet) {
-      const shortId = Math.random().toString(36).substring(2, 6).toUpperCase();
-      userToSet = {
-        uid: `usr_${shortId.toLowerCase()}`,
-        name: `User #${shortId}`,
-        status: 'ONLINE',
-        role: 'owner',
-        isLoggedIn: true,
-      };
-      try {
-        sessionStorage.setItem('loopx_tab_user', JSON.stringify(userToSet));
-      } catch (_) {}
-    }
-    initialUser = userToSet;
-  }
-
   return {
     ...initialState,
-    currentUser: initialUser,
+    rooms: [{ ...initialState.rooms[0]! }],
   };
 }
 
@@ -624,16 +581,80 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const cursorThrottleRef = useRef<number>(0);
   const networkCursorThrottleRef = useRef<number>(0);
 
-  // Helper to construct permanent shareable URL like Excalidraw
-  const getShareUrl = useCallback((roomId?: string) => {
-    const rId = roomId || state.roomId;
-    if (typeof window !== 'undefined') {
-      return `${window.location.origin}/app?room=${encodeURIComponent(rId)}`;
-    }
-    return `/app?room=${encodeURIComponent(rId)}`;
-  }, [state.roomId]);
+  // Helper to construct permanent shareable URL like Excalidraw (#room=roomId,roomKey)
+  const getShareUrl = useCallback(
+    (roomId?: string, roomKey?: string) => {
+      const rId = roomId || state.roomId;
+      const rKey = roomKey || state.roomKey;
+      if (rKey) {
+        return getCollaborationLink({ roomId: rId, roomKey: rKey });
+      }
+      if (typeof window !== 'undefined') {
+        return `${window.location.origin}/app?room=${encodeURIComponent(rId)}`;
+      }
+      return `/app?room=${encodeURIComponent(rId)}`;
+    },
+    [state.roomId, state.roomKey]
+  );
 
-  // Load saved session & room from query params on mount
+  const startCollaborationSession = useCallback(
+    async (customRoomId?: string | null) => {
+      const collabData = await generateCollaborationLinkData();
+      const finalRoomId = customRoomId || collabData.roomId;
+      const roomKey = collabData.roomKey;
+      const sessionName = `${state.currentUser.name || 'User'}'s Session`;
+
+      // 1. Preserve current canvas posts for the newly created room ID so peers see them
+      if (typeof window !== 'undefined' && state.posts && state.posts.length > 0) {
+        try {
+          localStorage.setItem(`loopx_posts_${finalRoomId}`, JSON.stringify(state.posts));
+        } catch (_) {}
+
+        // Broadcast current posts to the SSE relay cache for new connecting browsers
+        fetch('/api/collab', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            roomId: finalRoomId,
+            senderUid: state.currentUser.uid,
+            payload: {
+              type: 'canvas_initial_sync',
+              posts: state.posts,
+            },
+          }),
+        }).catch(() => {});
+      }
+
+      if (typeof window !== 'undefined') {
+        const collabUrl = getCollaborationLink({ roomId: finalRoomId, roomKey });
+        window.history.pushState(null, '', collabUrl);
+      }
+
+      dispatch({
+        type: 'SET_ROOM_ID',
+        roomId: finalRoomId,
+        sessionName,
+        roomKey,
+      });
+
+      return { roomId: finalRoomId, roomKey };
+    },
+    [state.currentUser.name, state.currentUser.uid, state.posts]
+  );
+
+  const stopCollaborationSession = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      window.history.pushState(null, '', window.location.pathname);
+    }
+    dispatch({
+      type: 'SET_ROOM_ID',
+      roomId: DEFAULT_ROOM_ID,
+      sessionName: 'Creative Workspace',
+      roomKey: null,
+    });
+  }, []);
+
+  // Load saved session & room from query params or Excalidraw zero-knowledge hash on mount
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -696,9 +717,47 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } catch (_) {}
     }
 
-    if (urlRoom) {
-      dispatch({ type: 'SET_ROOM_ID', roomId: urlRoom });
-    }
+    // 1. Check for Excalidraw zero-knowledge hash link: #room=<roomId>,<roomKey> or plain hash
+    const applyUrlRoom = () => {
+      const collabData = getCollaborationLinkData(window.location.href);
+      if (collabData) {
+        dispatch({
+          type: 'SET_ROOM_ID',
+          roomId: collabData.roomId,
+          roomKey: collabData.roomKey,
+          sessionName: 'Encrypted Collab Session',
+        });
+        return;
+      }
+
+      const hashMatch = window.location.hash.match(/^#room=([a-zA-Z0-9_-]+)$/);
+      if (hashMatch && hashMatch[1]) {
+        dispatch({
+          type: 'SET_ROOM_ID',
+          roomId: hashMatch[1],
+          roomKey: null,
+          sessionName: 'Workspace Session',
+        });
+        return;
+      }
+
+      if (urlRoom) {
+        const cleanUrlRoom = urlRoom.replace(/^#room=/i, '').split(',')[0]!;
+        dispatch({ type: 'SET_ROOM_ID', roomId: cleanUrlRoom });
+      }
+    };
+
+    applyUrlRoom();
+
+    // 2. Listen to browser hash changes
+    const handleHashChange = () => {
+      applyUrlRoom();
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+    };
   }, []);
 
   // Fetch local data for current room whenever roomId changes
@@ -785,12 +844,142 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (typeof window === 'undefined' || !state.roomId) return;
 
-    // Update browser URL query param seamlessly so copying address bar works like Excalidraw
-    const currentUrl = new URL(window.location.href);
-    if (currentUrl.pathname.includes('/app') && currentUrl.searchParams.get('room') !== state.roomId) {
-      currentUrl.searchParams.set('room', state.roomId);
-      window.history.replaceState(null, '', currentUrl.pathname + currentUrl.search);
+    // Keep Excalidraw zero-knowledge hash fragment intact
+    if (state.roomKey && state.roomId) {
+      const expectedHash = `#room=${state.roomId},${state.roomKey}`;
+      if (window.location.hash !== expectedHash) {
+        window.history.replaceState(null, '', `${window.location.pathname}${expectedHash}`);
+      }
+    } else if (!state.roomKey && window.location.search.includes('room=main-studio-workspace')) {
+      // Clean up legacy query parameter when working locally
+      window.history.replaceState(null, '', window.location.pathname);
     }
+
+    // ── Cross-Browser Real-Time Relay (SSE) ──────────────────────────────────
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource(`/api/collab?roomId=${encodeURIComponent(state.roomId)}`);
+      eventSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (!payload) return;
+          const myUid = currentUserRef.current.uid;
+          if (payload._senderUid && payload._senderUid.toLowerCase() === myUid.toLowerCase()) {
+            return;
+          }
+
+          if (payload.type === 'canvas_initial_sync' && Array.isArray(payload.posts) && payload.posts.length > 0) {
+            const merged = reconcileElements(state.posts || [], payload.posts);
+            dispatch({ type: 'SET_POSTS', posts: merged });
+            return;
+          }
+
+          if (payload.type === 'chat_initial_sync' && Array.isArray(payload.messages) && payload.messages.length > 0) {
+            payload.messages.forEach((msg: any) => {
+              if (msg && !isLegacyMockMessage(msg)) {
+                dispatch({ type: 'ADD_CHAT_MESSAGE', message: msg });
+              }
+            });
+            return;
+          }
+
+          if (payload.type === 'cursor_move') {
+            if (payload.uid === myUid) return;
+            dispatch({
+              type: 'UPDATE_COLLABORATOR_CURSOR',
+              cursor: {
+                uid: payload.uid,
+                name: payload.name || 'Collaborator',
+                role: payload.role || 'client',
+                color: payload.color || getRandomColor(payload.uid),
+                x: payload.x,
+                y: payload.y,
+                lastSeen: Date.now(),
+              },
+            });
+            dispatch({
+              type: 'USER_JOINED',
+              user: { uid: payload.uid, name: payload.name || 'Collaborator', status: 'ONLINE' },
+            });
+            return;
+          }
+
+          if (payload.type === 'presence_join' || payload.type === 'presence_ping') {
+            if (payload.user?.uid && payload.user.uid !== myUid) {
+              dispatch({ type: 'USER_JOINED', user: payload.user });
+              if (state.posts && state.posts.length > 0) {
+                fetch('/api/collab', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    roomId: state.roomId,
+                    senderUid: myUid,
+                    payload: {
+                      type: 'canvas_initial_sync',
+                      posts: state.posts,
+                    },
+                  }),
+                }).catch(() => {});
+              }
+            }
+            return;
+          }
+
+          if (payload.type === 'canvas_sync') {
+            switch (payload.event) {
+              case 'POST_MOVED': {
+                const localPost = state.posts.find((p) => p.id === payload.postId);
+                if (
+                  localPost &&
+                  shouldDiscardRemoteElement(
+                    { draggingElementId: state.activePostId },
+                    localPost,
+                    { id: payload.postId, version: payload.version, versionNonce: payload.versionNonce }
+                  )
+                ) {
+                  break;
+                }
+                dispatch({
+                  type: 'UPDATE_POST_POSITION',
+                  postId: payload.postId,
+                  x: payload.x,
+                  y: payload.y,
+                });
+                break;
+              }
+              case 'POST_CREATED':
+                dispatch({ type: 'ADD_POST', post: payload.post });
+                break;
+              case 'POST_STATUS':
+                dispatch({ type: 'UPDATE_POST_STATUS', postId: payload.postId, status: payload.status });
+                break;
+              case 'POST_HIGHLIGHTED':
+                dispatch({ type: 'TOGGLE_POST_HIGHLIGHT', postId: payload.postId });
+                break;
+              case 'POST_DELETED':
+                dispatch({ type: 'REMOVE_POST', postId: payload.postId });
+                break;
+              case 'ANNOTATION_ADDED':
+                dispatch({ type: 'ADD_ANNOTATION', annotation: payload.annotation });
+                break;
+              case 'ANNOTATION_RESOLVED':
+                dispatch({
+                  type: 'RESOLVE_ANNOTATION',
+                  id: payload.id,
+                  resolvedBy: payload.resolvedBy,
+                  resolvedAt: payload.resolvedAt,
+                });
+                break;
+              case 'CHAT_MESSAGE':
+                if (payload.message && !isLegacyMockMessage(payload.message)) {
+                  dispatch({ type: 'ADD_CHAT_MESSAGE', message: payload.message });
+                }
+                break;
+            }
+          }
+        } catch (_) {}
+      };
+    } catch (_) {}
 
     if (typeof BroadcastChannel === 'undefined') return;
 
@@ -1002,7 +1191,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } else if (payload.type === 'canvas_sync') {
         if (payload.senderUid === myUid) return;
         switch (payload.event) {
-          case 'POST_MOVED':
+          case 'POST_MOVED': {
+            const localPost = state.posts.find((p) => p.id === payload.postId);
+            if (
+              localPost &&
+              shouldDiscardRemoteElement(
+                { draggingElementId: state.activePostId },
+                localPost,
+                {
+                  id: payload.postId,
+                  version: payload.version,
+                  versionNonce: payload.versionNonce,
+                }
+              )
+            ) {
+              break;
+            }
             dispatch({
               type: 'UPDATE_POST_POSITION',
               postId: payload.postId,
@@ -1010,6 +1214,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               y: payload.y,
             });
             break;
+          }
           case 'POST_CREATED':
             dispatch({
               type: 'ADD_POST',
@@ -1069,6 +1274,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('pagehide', handleBeforeUnload);
       channel.close();
       channelRef.current = null;
+      if (eventSource) {
+        eventSource.close();
+      }
     };
   }, [state.roomId]);
 
@@ -1078,33 +1286,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (now - cursorThrottleRef.current < 32) return;
     cursorThrottleRef.current = now;
 
-    if (channelRef.current && currentUserRef.current.uid) {
+    const myUid = currentUserRef.current.uid;
+    if (!myUid) return;
+
+    const cursorPayload = {
+      type: 'cursor_move',
+      uid: myUid,
+      name: currentUserRef.current.name,
+      role: currentUserRef.current.role,
+      color: getRandomColor(myUid),
+      x,
+      y,
+    };
+
+    if (channelRef.current) {
       try {
-        channelRef.current.postMessage({
-          type: 'cursor_move',
-          uid: currentUserRef.current.uid,
-          name: currentUserRef.current.name,
-          role: currentUserRef.current.role,
-          color: getRandomColor(currentUserRef.current.uid),
-          x,
-          y,
-        });
+        channelRef.current.postMessage(cursorPayload);
       } catch (_) {}
     }
 
-    // Network cursor over CometChat (throttled to ~100ms) for incognito tabs & remote peers
-    if (now - networkCursorThrottleRef.current > 100 && currentUserRef.current.uid && state.roomId) {
+    // Network cursor over SSE Relay and CometChat (throttled to ~80ms)
+    if (now - networkCursorThrottleRef.current > 80 && state.roomId) {
       networkCursorThrottleRef.current = now;
+
+      fetch('/api/collab', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomId: state.roomId,
+          senderUid: myUid,
+          payload: cursorPayload,
+        }),
+      }).catch(() => {});
+
       import('@repo/cometchat-client').then(({ sendCollabSyncMessage }) => {
-        sendCollabSyncMessage(state.roomId, {
-          type: 'cursor_move',
-          uid: currentUserRef.current.uid,
-          name: currentUserRef.current.name,
-          role: currentUserRef.current.role,
-          color: getRandomColor(currentUserRef.current.uid),
-          x,
-          y,
-        }).catch(() => {});
+        sendCollabSyncMessage(state.roomId, cursorPayload).catch(() => {});
       }).catch(() => {});
     }
   }, [state.roomId]);
@@ -1233,6 +1449,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'REMOVE_ROOM', roomId });
   }, []);
 
+  const broadcastSyncPayload = useCallback((payload: any) => {
+    if (channelRef.current) {
+      try {
+        channelRef.current.postMessage(payload);
+      } catch (_) {}
+    }
+
+    if (state.roomId) {
+      fetch('/api/collab', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomId: state.roomId,
+          senderUid: currentUserRef.current.uid,
+          payload,
+        }),
+      }).catch(() => {});
+
+      import('@repo/cometchat-client').then(({ sendCollabSyncMessage }) => {
+        sendCollabSyncMessage(state.roomId, payload).catch(() => {});
+      }).catch(() => {});
+    }
+  }, [state.roomId]);
+
   const createPost = useCallback(
     (postData: Omit<BoardPost, 'id' | 'createdAt' | 'roomId' | 'createdBy' | 'createdByName'>): BoardPost => {
       const post: BoardPost = {
@@ -1244,139 +1484,76 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         createdAt: Date.now(),
         x: postData.x ?? 120,
         y: postData.y ?? 120,
+        version: 1,
+        versionNonce: Math.floor(Math.random() * 1000000000),
       };
 
       dispatch({ type: 'ADD_POST', post });
 
-      // Broadcast to other collaborators (Local & CometChat Network)
-      if (channelRef.current) {
-        try {
-          channelRef.current.postMessage({
-            type: 'canvas_sync',
-            event: 'POST_CREATED',
-            post,
-            senderUid: state.currentUser.uid,
-          });
-        } catch (_) {}
-      }
-
-      import('@repo/cometchat-client').then(({ sendCollabSyncMessage }) => {
-        sendCollabSyncMessage(state.roomId, {
-          type: 'canvas_sync',
-          event: 'POST_CREATED',
-          post,
-          senderUid: state.currentUser.uid,
-        }).catch(() => {});
-      }).catch(() => {});
+      broadcastSyncPayload({
+        type: 'canvas_sync',
+        event: 'POST_CREATED',
+        post,
+        senderUid: state.currentUser.uid,
+      });
 
       return post;
     },
-    [state.roomId, state.currentUser.uid, state.currentUser.name],
+    [state.roomId, state.currentUser.uid, state.currentUser.name, broadcastSyncPayload],
   );
 
   const deletePost = useCallback(async (postId: string) => {
     dispatch({ type: 'REMOVE_POST', postId });
 
-    // Broadcast to other collaborators
-    if (channelRef.current) {
-      try {
-        channelRef.current.postMessage({
-          type: 'canvas_sync',
-          event: 'POST_DELETED',
-          postId,
-          senderUid: state.currentUser.uid,
-        });
-      } catch (_) {}
-    }
-
-    import('@repo/cometchat-client').then(({ sendCollabSyncMessage }) => {
-      sendCollabSyncMessage(state.roomId, {
-        type: 'canvas_sync',
-        event: 'POST_DELETED',
-        postId,
-        senderUid: state.currentUser.uid,
-      }).catch(() => {});
-    }).catch(() => {});
-  }, [state.roomId, state.currentUser.uid]);
+    broadcastSyncPayload({
+      type: 'canvas_sync',
+      event: 'POST_DELETED',
+      postId,
+      senderUid: state.currentUser.uid,
+    });
+  }, [state.currentUser.uid, broadcastSyncPayload]);
 
   const updatePostPosition = useCallback((postId: string, x: number, y: number) => {
     dispatch({ type: 'UPDATE_POST_POSITION', postId, x, y });
 
-    // Broadcast to collaborators
-    if (channelRef.current) {
-      try {
-        channelRef.current.postMessage({
-          type: 'canvas_sync',
-          event: 'POST_MOVED',
-          postId,
-          x,
-          y,
-          senderUid: state.currentUser.uid,
-        });
-      } catch (_) {}
-    }
+    const localPost = state.posts.find((p) => p.id === postId);
+    const version = (localPost?.version ?? 0) + 1;
+    const versionNonce = Math.floor(Math.random() * 1000000000);
 
-    import('@repo/cometchat-client').then(({ sendCollabSyncMessage }) => {
-      sendCollabSyncMessage(state.roomId, {
-        type: 'canvas_sync',
-        event: 'POST_MOVED',
-        postId,
-        x,
-        y,
-        senderUid: state.currentUser.uid,
-      }).catch(() => {});
-    }).catch(() => {});
-  }, [state.roomId, state.currentUser.uid]);
+    broadcastSyncPayload({
+      type: 'canvas_sync',
+      event: 'POST_MOVED',
+      postId,
+      x,
+      y,
+      version,
+      versionNonce,
+      senderUid: state.currentUser.uid,
+    });
+  }, [state.currentUser.uid, state.posts, broadcastSyncPayload]);
 
   const updatePostStatus = useCallback((postId: string, status: BoardPost['status']) => {
     dispatch({ type: 'UPDATE_POST_STATUS', postId, status });
 
-    if (channelRef.current) {
-      try {
-        channelRef.current.postMessage({
-          type: 'canvas_sync',
-          event: 'POST_STATUS',
-          postId,
-          status,
-          senderUid: state.currentUser.uid,
-        });
-      } catch (_) {}
-    }
-
-    import('@repo/cometchat-client').then(({ sendCollabSyncMessage }) => {
-      sendCollabSyncMessage(state.roomId, {
-        type: 'canvas_sync',
-        event: 'POST_STATUS',
-        postId,
-        status,
-        senderUid: state.currentUser.uid,
-      }).catch(() => {});
-    }).catch(() => {});
-  }, [state.roomId, state.currentUser.uid]);
+    broadcastSyncPayload({
+      type: 'canvas_sync',
+      event: 'POST_STATUS',
+      postId,
+      status,
+      senderUid: state.currentUser.uid,
+    });
+  }, [state.currentUser.uid, broadcastSyncPayload]);
 
   const togglePostHighlight = useCallback((postId: string) => {
     dispatch({ type: 'TOGGLE_POST_HIGHLIGHT', postId });
 
-    if (channelRef.current) {
-      try {
-        channelRef.current.postMessage({
-          type: 'canvas_sync',
-          event: 'POST_HIGHLIGHTED',
-          postId,
-          senderUid: state.currentUser.uid,
-        });
-      } catch (_) {}
-    }
-
-    import('@repo/cometchat-client').then(({ sendCollabSyncMessage }) => {
-      sendCollabSyncMessage(state.roomId, {
-        type: 'canvas_sync',
-        event: 'POST_HIGHLIGHTED',
-        postId,
-        senderUid: state.currentUser.uid,
-      }).catch(() => {});
-    }).catch(() => {});
-  }, [state.roomId, state.currentUser.uid]);
+    broadcastSyncPayload({
+      type: 'canvas_sync',
+      event: 'POST_HIGHLIGHTED',
+      postId,
+      senderUid: state.currentUser.uid,
+    });
+  }, [state.currentUser.uid, broadcastSyncPayload]);
 
   const addBrandAsset = useCallback(
     (name: string, category: BrandAsset['category'], src: string) => {
@@ -1583,6 +1760,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         addCanvasElement,
         broadcastCursor,
         getShareUrl,
+        startCollaborationSession,
+        stopCollaborationSession,
         sendRealtimeChatMessage,
         clearChatMessages,
         updateUserName,

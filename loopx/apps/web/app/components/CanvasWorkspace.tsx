@@ -350,6 +350,95 @@ export function CanvasWorkspace() {
     });
   }
 
+  // ── Mobile Touch Gesture Handling (Pan, Drag & Pinch-to-Zoom) ─────────────
+  const touchStartDistRef = useRef<number | null>(null);
+  const touchStartZoomRef = useRef<number>(100);
+
+  function handleTouchStart(e: React.TouchEvent<HTMLDivElement>) {
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      if (!touch) return;
+      setIsPanning(true);
+      setPanStart({ x: touch.clientX - panOffset.x, y: touch.clientY - panOffset.y });
+    } else if (e.touches.length === 2) {
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      if (t1 && t2) {
+        setIsPanning(false);
+        const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        touchStartDistRef.current = dist;
+        touchStartZoomRef.current = zoom;
+      }
+    }
+  }
+
+  function handleTouchMove(e: React.TouchEvent<HTMLDivElement>) {
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      if (!touch) return;
+
+      const scale = zoom / 100;
+      const canvasX = Math.round((touch.clientX - panOffset.x) / scale);
+      const canvasY = Math.round((touch.clientY - panOffset.y) / scale);
+      broadcastCursor(canvasX, canvasY);
+
+      if (isPanning) {
+        setPanOffset({
+          x: touch.clientX - panStart.x,
+          y: touch.clientY - panStart.y,
+        });
+        return;
+      }
+
+      if (draggingTarget) {
+        const newX = Math.round((touch.clientX - dragOffset.x - panOffset.x) / scale);
+        const newY = Math.round((touch.clientY - dragOffset.y - panOffset.y) / scale);
+
+        if (draggingTarget.type === 'post') {
+          updatePostPosition(draggingTarget.id, newX, newY);
+        } else {
+          setChatNodePositions((prev) => ({
+            ...prev,
+            [draggingTarget.id]: { x: newX, y: newY },
+          }));
+        }
+      }
+    } else if (e.touches.length === 2 && touchStartDistRef.current) {
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      if (t1 && t2) {
+        const currentDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        const ratio = currentDist / touchStartDistRef.current;
+        const newZoom = Math.min(300, Math.max(25, Math.round(touchStartZoomRef.current * ratio)));
+        setZoom(newZoom);
+      }
+    }
+  }
+
+  function handleTouchEnd() {
+    setIsPanning(false);
+    touchStartDistRef.current = null;
+    handleMouseUp();
+  }
+
+  function startTouchDrag(e: React.TouchEvent<HTMLDivElement>, id: string, type: 'post' | 'chat') {
+    if (e.touches.length !== 1 || isHandMode) return;
+    const touch = e.touches[0];
+    if (!touch) return;
+    e.stopPropagation();
+
+    if (type === 'post') {
+      dispatch({ type: 'SELECT_POST', postId: id });
+    }
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    setDraggingTarget({ id, type });
+    setDragOffset({
+      x: touch.clientX - rect.left,
+      y: touch.clientY - rect.top,
+    });
+  }
+
   function toggleStartConvo(e: React.MouseEvent, postId: string) {
     e.stopPropagation();
     dispatch({ type: 'SELECT_POST', postId });
@@ -681,7 +770,11 @@ export function CanvasWorkspace() {
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
-      className={`flex-1 relative bg-neutral-50 dot-canvas overflow-hidden flex flex-col items-center justify-start select-none ${
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
+      className={`flex-1 relative bg-neutral-50 dot-canvas overflow-hidden flex flex-col items-center justify-start select-none touch-none ${
         isPanning ? 'cursor-grabbing' : isHandMode || isSpacePressed ? 'cursor-grab' : ''
       } ${isMaximized ? 'fixed inset-0 z-50 w-screen h-screen' : ''}`}
       style={{
@@ -697,12 +790,12 @@ export function CanvasWorkspace() {
       )}
 
       {/* ── Bottom Floating Action Bar (Sleek Studio Dock) ── */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 glass-dock rounded-2xl px-2.5 py-1.5 text-neutral-800 animate-fade-in pointer-events-auto font-sans">
+      <div className="absolute bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 sm:gap-1.5 glass-dock rounded-2xl px-2 sm:px-2.5 py-1 sm:py-1.5 text-neutral-800 animate-fade-in pointer-events-auto font-sans max-w-[95vw] shadow-xl overflow-x-auto">
         {/* Moving Border Highlight Toggle */}
         <button
           onClick={() => activePost && togglePostHighlight(activePost.id)}
           disabled={!activePost}
-          className={`px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-all ${
+          className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl text-xs font-medium flex items-center gap-1 sm:gap-1.5 transition-all shrink-0 ${
             activePost?.isHighlighted
               ? 'bg-purple-600 text-white shadow-xs font-semibold'
               : 'hover:bg-neutral-100 text-neutral-700'
@@ -711,7 +804,7 @@ export function CanvasWorkspace() {
         >
           <Sparkles className="w-3.5 h-3.5" />
           <span className="text-[11px]">{activePost?.isHighlighted ? 'Highlighted' : 'Highlight'}</span>
-          <kbd className={`text-[9px] font-mono px-1 py-0.2 rounded ${activePost?.isHighlighted ? 'bg-white/20 text-white' : 'bg-neutral-100 border border-neutral-200 text-neutral-600'}`}>H</kbd>
+          <kbd className={`hidden sm:inline-block text-[9px] font-mono px-1 py-0.2 rounded ${activePost?.isHighlighted ? 'bg-white/20 text-white' : 'bg-neutral-100 border border-neutral-200 text-neutral-600'}`}>H</kbd>
         </button>
 
         <div className="w-[1px] h-4 bg-neutral-200/80 mx-0.5" />
@@ -907,6 +1000,7 @@ export function CanvasWorkspace() {
                 {/* ── 1. POST NODE CARD ── */}
                 <div
                   onMouseDown={(e) => startDrag(e, post.id, 'post')}
+                  onTouchStart={(e) => startTouchDrag(e, post.id, 'post')}
                   onClick={() => !isHandMode && dispatch({ type: 'SELECT_POST', postId: post.id })}
                   className="absolute z-10 cursor-grab active:cursor-grabbing flex flex-col"
                   style={{
@@ -1092,7 +1186,8 @@ export function CanvasWorkspace() {
 
                   <div
                     onMouseDown={(e) => startDrag(e, post.id, 'chat')}
-                    className="absolute w-[360px] rounded-2xl bg-white border border-neutral-200/90 shadow-[0_16px_40px_-6px_rgba(15,23,42,0.18)] overflow-hidden z-20 cursor-grab active:cursor-grabbing animate-fade-in text-neutral-900"
+                    onTouchStart={(e) => startTouchDrag(e, post.id, 'chat')}
+                    className="absolute w-[360px] max-w-[90vw] rounded-2xl bg-white border border-neutral-200/90 shadow-[0_16px_40px_-6px_rgba(15,23,42,0.18)] overflow-hidden z-20 cursor-grab active:cursor-grabbing animate-fade-in text-neutral-900"
                     style={{
                       left: `${chatPos.x}px`,
                       top: `${chatPos.y}px`,

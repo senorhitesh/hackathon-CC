@@ -55,9 +55,7 @@ export function TopBar() {
   const activeShareUrl = getShareUrl(roomId);
 
   function handleCopyShareLink() {
-    const url = typeof window !== 'undefined'
-      ? `${window.location.origin}/app?room=${encodeURIComponent(roomId || 'main-studio-workspace')}`
-      : activeShareUrl;
+    const url = activeShareUrl;
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
       navigator.clipboard.writeText(url).then(() => {
         setCopied(true);
@@ -83,10 +81,10 @@ export function TopBar() {
   );
 
   return (
-    <header className="h-12 bg-white/90 backdrop-blur-xl border-b border-neutral-200/80 px-4 flex items-center justify-between z-40 shrink-0 gap-3 text-neutral-900 select-none">
-      {/* ── Left: Breadcrumb Navigation (Image 3 style: My projects / Untitled) ── */}
-      <div className="flex items-center gap-2 min-w-0">
-        <Link href="/" className="flex items-center gap-2 mr-1 hover:opacity-85 transition-opacity shrink-0">
+    <header className="h-12 bg-white/90 backdrop-blur-xl border-b border-neutral-200/80 px-2.5 sm:px-4 flex items-center justify-between z-40 shrink-0 gap-1.5 sm:gap-3 text-neutral-900 select-none">
+      {/* ── Left: Breadcrumb Navigation ── */}
+      <div className="flex items-center gap-1 sm:gap-2 min-w-0">
+        <Link href="/" className="flex items-center gap-1.5 sm:gap-2 mr-0.5 sm:mr-1 hover:opacity-85 transition-opacity shrink-0">
           <img
             src="/loogx-logo&favicon.png"
             alt="loopx logo"
@@ -97,9 +95,9 @@ export function TopBar() {
           </span>
         </Link>
 
-        <span className="text-neutral-300">/</span>
+        <span className="text-neutral-300 hidden sm:inline">/</span>
 
-        <Link href="/dashboard" className="flex items-center gap-1.5 text-xs text-neutral-500 hover:text-black transition-colors shrink-0">
+        <Link href="/dashboard" className="hidden sm:flex items-center gap-1.5 text-xs text-neutral-500 hover:text-black transition-colors shrink-0">
           <div className="w-5 h-5 rounded-md bg-neutral-100 border border-neutral-200 flex items-center justify-center">
             <LayoutGrid className="w-3 h-3 text-neutral-700" />
           </div>
@@ -112,9 +110,9 @@ export function TopBar() {
         <div className="relative">
           <button
             onClick={() => setBoardDropdownOpen(!boardDropdownOpen)}
-            className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-neutral-100 text-xs font-semibold text-neutral-900 transition-colors"
+            className="flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-md hover:bg-neutral-100 text-xs font-semibold text-neutral-900 transition-colors"
           >
-            <span className="truncate max-w-[130px] sm:max-w-[200px]">
+            <span className="truncate max-w-[100px] sm:max-w-[200px]" suppressHydrationWarning>
               {sessionName || 'Untitled'}
             </span>
             <ChevronDown className="w-3 h-3 text-neutral-400" />
@@ -178,8 +176,9 @@ export function TopBar() {
               <div
                 className="w-6 h-6 rounded-full border border-white bg-neutral-900 text-white flex items-center justify-center text-[10px] font-bold shadow-xs select-none"
                 title={`${currentUser.name} (You)`}
+                suppressHydrationWarning
               >
-                {(currentUser.name || 'Y').charAt(0).toUpperCase()}
+                <span suppressHydrationWarning>{(currentUser.name || 'Y').charAt(0).toUpperCase()}</span>
               </div>
               {activeCollabList.slice(0, 3).map((collab) => {
                 const effName = getEffectiveUserName(collab.uid, collab.name);
@@ -379,94 +378,21 @@ export function TopBar() {
           )}
         </div>
 
-        {/* ── Share Button & Popover ── */}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setSharePopoverOpen(!sharePopoverOpen)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all shadow-xs active:scale-95 ${
-              sharePopoverOpen
-                ? 'bg-neutral-900 text-white'
-                : 'bg-neutral-100 hover:bg-neutral-200/90 text-neutral-800 border border-neutral-200/90'
-            }`}
-            title="Share workspace for live collaboration"
-          >
-            <Share2 className="w-3.5 h-3.5" />
-            <span>Share</span>
-          </button>
+        {/* ── Excalidraw-style Live Collaboration Share Button ── */}
+        <button
+          type="button"
+          onClick={() => dispatch({ type: 'TOGGLE_MODAL', modal: 'isShareOpen', value: true })}
+          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all shadow-xs active:scale-95 ${
+            state.roomId
+              ? 'bg-[#6965db] hover:bg-[#5b57d1] text-white'
+              : 'bg-[#ececfc] hover:bg-[#dfdffc] text-[#5b58c7] border border-[#d6d6fa]'
+          }`}
+          title="Live collaboration & Share"
+        >
+          <Share2 className="w-3.5 h-3.5" />
+          <span>Share</span>
+        </button>
 
-          {sharePopoverOpen && (
-            <>
-              {/* Click-outside backdrop */}
-              <div
-                className="fixed inset-0 z-40"
-                onClick={() => setSharePopoverOpen(false)}
-              />
-
-              {/* Share Popover */}
-              <div className="absolute top-full right-0 mt-2 w-80 rounded-2xl bg-white border border-neutral-200 shadow-2xl p-4 z-50 animate-fade-in text-neutral-900">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <img src="/loogx-logo&favicon.png" alt="loopx" className="w-4 h-4 rounded-sm object-contain" />
-                    <h4 className="text-xs font-semibold text-neutral-900">
-                      Collaborative Workspace
-                    </h4>
-                  </div>
-                  <span className="text-[10px] font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                    Live Sync
-                  </span>
-                </div>
-                <p className="text-[11px] text-neutral-500 leading-snug mb-3">
-                  Anyone with this link can view, chat, and place pins on this canvas in real time.
-                </p>
-
-                {/* Share link input + Copy button */}
-                <div className="flex items-center gap-1.5 mb-3">
-                  <input
-                    type="text"
-                    readOnly
-                    value={activeShareUrl}
-                    onFocus={(e) => e.target.select()}
-                    className="w-full px-2.5 py-1.5 rounded-lg border border-neutral-200 bg-neutral-50 text-xs font-mono text-neutral-700 truncate focus:outline-none focus:border-neutral-400 select-all"
-                  />
-                  <button
-                    onClick={handleCopyShareLink}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 flex items-center gap-1 border ${
-                      copied
-                        ? 'bg-emerald-50 border-emerald-300 text-emerald-700 font-semibold'
-                        : 'bg-neutral-900 hover:bg-black text-white border-neutral-900'
-                    }`}
-                  >
-                    {copied ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Copied!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>Copy</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                {/* Action buttons */}
-                <div className="pt-2 border-t border-neutral-100 flex items-center justify-between">
-                  <a
-                    href={activeShareUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[11px] text-neutral-600 hover:text-black flex items-center gap-1 transition-colors font-medium"
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                    <span>Open in New Window</span>
-                  </a>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
 
         {/* ── User Profile Menu ── */}
         <div className="relative">
@@ -483,8 +409,8 @@ export function TopBar() {
                 className="w-7 h-7 rounded-full object-cover border border-neutral-200"
               />
             ) : (
-              <div className="w-7 h-7 rounded-full bg-neutral-900 text-white text-[11px] font-semibold flex items-center justify-center shadow-2xs">
-                {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : 'U'}
+              <div className="w-7 h-7 rounded-full bg-neutral-900 text-white text-[11px] font-semibold flex items-center justify-center shadow-2xs" suppressHydrationWarning>
+                <span suppressHydrationWarning>{currentUser.name ? currentUser.name.charAt(0).toUpperCase() : 'U'}</span>
               </div>
             )}
           </button>
@@ -495,7 +421,7 @@ export function TopBar() {
                 {!isEditingMyName ? (
                   <div>
                     <div className="flex items-center justify-between">
-                      <p className="text-xs font-bold text-neutral-900 truncate">
+                      <p className="text-xs font-bold text-neutral-900 truncate" suppressHydrationWarning>
                         {currentUser.name}
                       </p>
                       <button

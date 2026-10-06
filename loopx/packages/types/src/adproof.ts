@@ -179,6 +179,8 @@ export interface BoardPost {
   x?: number;
   y?: number;
   isHighlighted?: boolean;
+  version?: number;
+  versionNonce?: number;
 }
 
 export interface BoardRoom {
